@@ -94,6 +94,13 @@ amixer -c 0 cset numid=17 1
 speaker-test -D hw:0,0 -c 2 -r 44100 -F S16_LE -t sine
 ```
 
+Mixer ayarlarını reboot sonrasında otomatik uygulamak için:
+
+```bash
+scp scripts/alpine-public/audio-service.sh piranha@10.0.0.2:/tmp/
+ssh -t piranha@10.0.0.2 'sudo sh /tmp/audio-service.sh'
+```
+
 ## İlk boot: ne beklemeli
 UART olmadığı için teşhis planı:
 1. **Panel açılırsa** → tty1'de boot log'u göreceksin (`fbcon`, `ForwardToConsole=yes`)

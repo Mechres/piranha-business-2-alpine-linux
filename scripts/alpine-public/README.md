@@ -121,6 +121,16 @@ amixer -c 0 cset numid=17 1
 speaker-test -D hw:0,0 -c 2 -r 44100 -F S16_LE -t sine
 ```
 
+To apply the mixer settings automatically at boot, install the OpenRC service:
+
+```bash
+scp scripts/alpine-public/audio-service.sh piranha@10.0.0.2:/tmp/
+ssh -t piranha@10.0.0.2 'sudo sh /tmp/audio-service.sh'
+```
+
+The service waits for `/dev/snd/controlC0`, enables the speaker mixer path and
+is added to the default runlevel.
+
 ## Graphics and video acceleration
 
 The kernel registers Lima for the Mali-400 GPU and Cedrus as `/dev/video0`.
