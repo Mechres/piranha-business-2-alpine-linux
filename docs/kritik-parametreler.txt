@@ -382,4 +382,8 @@ pmu_resume_chgcur2 = 400
 pmu_shutdown_chgcur2 = 1200
 pmu_suspendpwroff_vol = 3500
 pmu_batdeten = 1
+[NOT]
+Bu dosya Android `script.bin`/FEX'ten çıkarılmış tarihsel boot parametrelerini
+korur. Buradaki `dram_size = 512` değeri mevcut Piranha donanımının gerçek RAM
+kapasitesini temsil etmeyebilir; cihaz 1 GB RAM ve 1.4 GHz CPU olarak doğrulandı.
 

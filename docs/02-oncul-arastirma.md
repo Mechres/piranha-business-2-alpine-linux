@@ -42,7 +42,7 @@ Armbian forum konusu #52328 + Unix SE #796123. **Aynı `crane` kartı.** Sonuçl
 | "Starting kernel..." sonrası hiçbir şey | Ekran düğümü yok → **UART veya HDMI olmadan kör uçuş**. Bizim durumda kritik. |
 | `BUG: Bad page state`, kernel panic, kararsızlık | **DRAM saati fazla yüksek.** Onun fex'i 384 diyordu, o 432 ile derlemişti. Bizim fex `dram_clk=432` — bizim için doğru olan bu, ama kararsızlık görürsek **ilk düşürülecek şey budur.** |
 | USB klavye/mouse çalışmıyor | **USB OTG rolü**. `dr_mode = "otg"` ID-pin algılamasına güveniyor, çalışmıyor. Çözüm: `dr_mode = "host"` zorla. |
-| RAM 1 GB (A088 kartı) | **Bizden farklı**: onun kartı 1 GB, bizim `dram_size=512`. Farklı varyant — onun DRAM sonuçlarını bize birebir uygulamayalım. |
+| RAM 1 GB (A088 kartı) | FEX'teki `dram_size=512` değeri gerçek cihaz RAM'iyle uyuşmuyor; mevcut Piranha donanımı 1 GB olarak doğrulandı. |
 
 ### Bizim için doğrudan aksiyona dönüşen dersler
 1. **`dr_mode = "host"` yap** → USB klavye/mouse ilk boot'ta çalışsın (UART yok, girdi şart).

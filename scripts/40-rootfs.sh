@@ -112,7 +112,7 @@ EOF
 echo "%sudo ALL=(ALL:ALL) ALL" > /etc/sudoers.d/piranha
 chmod 440 /etc/sudoers.d/piranha
 
-# swap (512MB RAM icin 256MB)
+# swap (1GB RAM icin; Alpine akışında bu eski Debian scripti kullanılmaz)
 dd if=/dev/zero of=/swapfile bs=1M count=256 status=none
 chmod 600 /swapfile
 mkswap /swapfile >/dev/null

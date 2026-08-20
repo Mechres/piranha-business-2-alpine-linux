@@ -9,7 +9,7 @@
 Allwinner A10 "Piranha Business II Tab" tablete mainline Linux. Hafif dokunmatik+ekranlı masaüstü (X11+JWM) + **çalışan ağ** (USB Ethernet g_ether öncelik, WiFi RTL8188CUS ikincil). SD'den boot, NAND'a asla yazma.
 
 ## ANA DONANIM (kesin)
-- SoC: Allwinner A10 (sun4i), Cortex-A8 1GHz, 512MB RAM
+- SoC: Allwinner A10 (sun4i), Cortex-A8 1.4GHz, 1GB RAM
 - PMIC: AXP209 | Panel: 800x480 (starry/kr070pe2t) | DRM: sun4i-drm + LCDC
 - Touch: **goodix GT827** i2c-2 / 0x5d, INT=PH21 RST=PB13
 - WiFi: **RTL8188CUS** (0bda:8176) — tablet İÇİNDE gömülü USB (dongle DEĞİL)
@@ -46,7 +46,7 @@ Allwinner A10 "Piranha Business II Tab" tablete mainline Linux. Hafif dokunmatik
 6. **Klavye TR layout**: Alpine `keymaps` servisi `trq` ile çözüldü.
 
 ## KRİTİK KARARLAR
-- **Debian → Alpine GEÇİLDİ**: 512MB RAM + systemd A10'da sürekli wedge. Alpine (OpenRC, musl) çok daha hafif. YAPILDI.
+- **Debian → Alpine GEÇİLDİ**: Alpine (OpenRC, musl) daha hafif ve bu cihaz için daha uygun. YAPILDI.
 - WiFi: Alpine OpenRC `wifi` servisi ile bootta otomatik başlıyor.
 - GT811 → GT827: sürücü `gt827.c` olarak YAZILDI (gt811.c kernel ağacından SİLİNDİ).
 

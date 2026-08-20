@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0+
 /*
  * Piranha Business II Tab (Softwinners "crane" / crane-a702jhorange)
- * Allwinner A10 (sun4i) · 512 MB DDR3 · AXP209 · 800x480 starry,kr070pe2t
+ * Allwinner A10 (sun4i) · 1 GB DDR3 · AXP209 · 800x480 starry,kr070pe2t
  * Goodix GT811 dokunmatik (i2c2 @0x5D) · RTL8188CUS USB WiFi
  *
  * Topwise A721 (Pascal Roeleven, 2020) temel alındı. Farklar:

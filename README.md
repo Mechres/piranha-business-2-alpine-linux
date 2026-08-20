@@ -1,6 +1,6 @@
 # Piranha Business II Tab → Linux
 
-**Cihaz:** Allwinner A10 (sun4i, Cortex-A8 @1GHz) · AXP209 · 512MB DDR3 · RTL8188CUS WiFi · Hynix H27UCG8 NAND (MLC) · **Goodix GT827** dokunmatik · 800×480 panel
+**Cihaz:** Allwinner A10 (sun4i, Cortex-A8 @1.4GHz) · AXP209 · 1GB DDR3 · RTL8188CUS WiFi · Hynix H27UCG8 NAND (MLC) · **Goodix GT827** dokunmatik · 800×480 panel
 **Kart kimliği:** Softwinners `crane` / `crane-a702jhorange` · script.bin `A10-EVB-V1.1`
 **Hedef:** microSD'den boot eden, ekran + dokunmatik + ağ + ses çalışan çok hafif Alpine masaüstü (OpenRC + X11 + JWM)
 
@@ -10,7 +10,7 @@ SD takılıysa SD'den boot eder, çıkarınca Android geri gelir.
 
 ## Güncel donanım durumu
 - Dokunmatik Linux tarafında **GT827** olarak çalışıyor (@i2c2 0x5D); Android vendor modülü `gt811_ts-827-fz` adını kullanıyor.
-- RAM: 512 MB DDR3 @432 MHz
+- RAM: 1 GB DDR3; extracted FEX reports an older/incorrect 512 MB boot configuration
 - Panel: 800×480, mainline `starry,kr070pe2t` ile **birebir** eşleşiyor
 
 GT827 sürücüsü ayrı bir repoda geliştirilmektedir:
@@ -118,7 +118,7 @@ Kullanıcılar: `root:piranha` ve `piranha:piranha` — **ilk boot sonrası değ
 | 🟢 U-Boot / SD / AXP209 / WiFi / ALSA | Çalışıyor |
 
 ## Beklenti
-Tek çekirdek A8 @1GHz + 512MB RAM + 800×480 = **kiosk sınıfı**.
+Tek çekirdek A8 @1.4GHz + 1GB RAM + 800×480 = **hafif masaüstü/kiosk sınıfı**.
 JWM + pcmanfm + xterm kurulu. Chromium/Firefox kullanılabilir olmaz; netsurf/dillo düşün.
 Lima GPU kernel'de çalışıyor. Cedrus VPU `/dev/video0` olarak kayıtlı; mevcut Alpine
 FFmpeg/mpv kullanıcı alanı stateless Cedrus hızlandırmasını henüz kullanmıyor.

@@ -12,7 +12,7 @@ Kaynak: `fex/tablet.fex` (script.bin v1.2, 75 bölüm) + `docs/recon.log` (canl�
 |---|---|---|---|
 | Dokunmatik | Goodix **GT827** | **Goodix GT827** @ i2c-2, 0x5D | Android vendor adı `gt811_ts-827-fz`; Linux probe ID `0x27`, input `Goodix GT827 Touchscreen` |
 | Ekran | (belirtilmedi) | **800×480** RGB paralel (24-bit, PD00–PD27) | fex `lcd_x=800 lcd_y=480`, fb0 `U:800x480p-59` |
-| RAM | MT.Mosel | **512 MB DDR3**, 432 MHz, 1 rank, 32-bit bus | fex `dram_size=512 dram_type=3 dram_clk=432` |
+| RAM | MT.Mosel | **1 GB DDR3**, up to 1.4 GHz CPU configuration | Hardware/runtime report; extracted FEX contains an older `dram_size=512` value |
 
 GT811, mainline `goodix.c`'nin desteklediği GT9xx serisinde **DEĞİL**. Bu projenin en büyük teknik riski (aşağıda).
 
@@ -94,8 +94,8 @@ AC algılama GPIO: PH2
 4. 🟢 WiFi (rtl8192cu), AXP209, SD, Mali/Lima, ALSA sun4i-codec — doğrulandı.
 
 ## Beklenti ayarı
-800×480 + A10 (tek çekirdek Cortex-A8 @1 GHz) + 512 MB RAM. Bu bir masaüstü değil,
-**kiosk sınıfı** bir cihaz. Xfce ağır kalır. Hedef: X11 + **Openbox/JWM** ya da wayland+labwc,
+800×480 + A10 (tek çekirdek Cortex-A8 @1.4 GHz) + 1 GB RAM. Bu hafif bir masaüstü/
+**kiosk sınıfı** cihazdır. Xfce yine ağır kalır. Hedef: X11 + **Openbox/JWM** ya da wayland+labwc,
 tarayıcı olarak netsurf/dillo. Chromium/Firefox bu RAM'de kullanılabilir olmaz.
 
 ## Uygulama sonrası doğrulanan durum (2026-08-20)
