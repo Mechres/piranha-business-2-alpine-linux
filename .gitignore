@@ -1,0 +1,47 @@
+# Generated build trees and downloaded toolchains
+/kernel/linux/
+/uboot/u-boot/
+/toolchain/
+
+# Generated root filesystems and SD-card staging areas
+/rootfs/alpine/
+/rootfs/debian/
+/rootfs/*/var/
+/rootfs/*/run/
+/rootfs/*/tmp/
+
+# Images, boot artifacts and kernel modules
+*.img
+*.ko
+*.dtb
+zImage
+u-boot-sunxi-with-spl.bin
+*.scr
+*.itb
+
+# Generated kernel/config/build files
+.config
+*.o
+*.cmd
+*.a
+*.so
+*.so.*
+modules.order
+Module.symvers
+
+# Local mounts, logs and diagnostics
+/mnt/
+/tmp/
+*.log
+*.swp
+*~
+
+# Device-specific Android/vendor material. Keep local unless redistribution
+# rights are confirmed.
+/backup/
+/gt811/android-ko/*.ko
+/gt811/android-ko/fw_*.bin
+/gt811/android-ko/cfg_*.bin
+
+# The GT827 driver has its own repository.
+/drivers/gt827/
