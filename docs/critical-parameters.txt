@@ -382,8 +382,8 @@ pmu_resume_chgcur2 = 400
 pmu_shutdown_chgcur2 = 1200
 pmu_suspendpwroff_vol = 3500
 pmu_batdeten = 1
-[NOT]
-Bu dosya Android `script.bin`/FEX'ten çıkarılmış tarihsel boot parametrelerini
-korur. Buradaki `dram_size = 512` değeri mevcut Piranha donanımının gerçek RAM
-kapasitesini temsil etmeyebilir; cihaz 1 GB RAM ve 1.4 GHz CPU olarak doğrulandı.
-
+[NOTE]
+This file preserves the historical boot parameters extracted from the Android
+`script.bin`/FEX. The `dram_size = 512` value here may not represent the real
+RAM capacity of this Piranha tablet; the device was verified to have 1 GB RAM
+and a 1.4 GHz CPU.

@@ -1,48 +1,49 @@
 #!/usr/bin/env bash
-# ADIM 5 (v2): Debian armhf rootfs — podman + qemu-arm binfmt ile
+# [LEGACY - Debian flow, superseded by the Alpine scripts 45-alpine-stage1.sh / 45-alpine-stage2.sh]
+# STEP 5 (v2): Debian armhf rootfs — via podman + qemu-arm binfmt
 #
-# NEDEN podman: Arch'ta dpkg kurulu olmadığı için debootstrap host mimarisini
-# tanıyamıyor ("Unknown architecture: x86_64"). Podman resmi debian:bookworm
-# armhf imajını kullanmak hem daha temiz hem daha hızlı.
+# WHY podman: Arch has no dpkg installed, so debootstrap cannot recognise the host
+# architecture ("Unknown architecture: x86_64"). Using the official debian:bookworm
+# armhf image through podman is both cleaner and faster.
 #
-# NOTLAR:
-#  - firmware-realtek bookworm'ta non-free'da; RTL firmware kartın Android'inden
-#    de alınabilir, bu yüzden atlanabilir (--no-install-recommends ile).
-#  - container'da systemd ÇALIŞMIYOR -> systemctl yok. enable yerine manuel symlink.
+# NOTES:
+#  - firmware-realtek is in non-free on bookworm; the RTL firmware can also be taken from the
+#    board's Android, so it can be skipped (--no-install-recommends).
+#  - systemd does NOT run in the container -> no systemctl. Create the symlinks by hand instead of `enable`.
 set -euo pipefail
-# PRJ'yi script'in KENDI konumundan turet ($HOME sudo altinda /root olur)
+# Derive PRJ from the script's own location ($HOME is /root under sudo)
 PRJ_DERIVED="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PRJ="$PRJ_DERIVED"
 RFS="$PRJ/rootfs/debian"
 CTR=piranha-rootfs
 
-command -v podman >/dev/null || { echo "HATA: podman gerekli"; exit 1; }
+command -v podman >/dev/null || { echo "ERROR: podman is required"; exit 1; }
 ls /proc/sys/fs/binfmt_misc/qemu-arm >/dev/null 2>&1 || {
-  echo "HATA: qemu-arm binfmt kayıtlı değil. Kur: sudo pacman -S qemu-user-static-binfmt"; exit 1; }
+  echo "ERROR: qemu-arm binfmt is not registered. Install: sudo pacman -S qemu-user-static-binfmt"; exit 1; }
 
-# NOT: Bu script NORMAL kullanıcı olarak çalıştırılmalı (sudo bash DEĞİL).
-# podman rootless kalsın diye. Sadece export/modules_install adımları sudo
-# kullanır ve o an şifre sorar.
+# NOTE: Run this script as a NORMAL user (NOT with sudo).
+# so that podman stays rootless. Only the export/modules_install steps use sudo
+# and ask for the password at that point.
 if [ "$(id -u)" = "0" ]; then
-  echo "HATA: bu scripti sudo ile çalıştırma. Düz çalıştır:"
+  echo "ERROR: do not run this script with sudo. Run it plainly:"
   echo "  bash scripts/40-rootfs.sh"
-  echo "(export adımında sudo şifresi soracak)"
+  echo "(it will ask for the sudo password during the export step)"
   exit 1
 fi
 
-echo ">>> eski konteyner temizliği"
+echo ">>> cleaning up the old container"
 podman rm -f "$CTR" 2>/dev/null || true
 
-echo ">>> armhf debian:bookworm konteyner başlat"
+echo ">>> starting the armhf debian:bookworm container"
 podman run --name "$CTR" --platform linux/arm/v7 -d \
   docker.io/library/debian:bookworm sleep infinity
 
-echo ">>> mimari doğrula (armv7l olmalı)"
+echo ">>> verifying the architecture (must be armv7l)"
 ARCH=$(podman exec "$CTR" uname -m)
-echo "konteyner mimarisi: $ARCH"
-case "$ARCH" in armv7l|armv8l|arm*) ;; *) echo "HATA: armhf değil ($ARCH)"; exit 1;; esac
+echo "container architecture: $ARCH"
+case "$ARCH" in armv7l|armv8l|arm*) ;; *) echo "ERROR: not armhf ($ARCH)"; exit 1;; esac
 
-echo ">>> paketler kuruluyor (uzun sürer, qemu emülasyonu)"
+echo ">>> installing packages (takes long, qemu emulation)"
 podman exec "$CTR" bash -c 'export DEBIAN_FRONTEND=noninteractive
 apt-get update
 apt-get install -y --no-install-recommends \
@@ -55,7 +56,7 @@ apt-get install -y --no-install-recommends \
 apt-get clean
 rm -rf /var/lib/apt/lists/*'
 
-echo ">>> sistem yapılandırması"
+echo ">>> system configuration"
 podman exec "$CTR" bash -c '
 cat > /etc/fstab <<EOF
 /dev/mmcblk0p2  /       ext4  defaults,noatime  0 1
@@ -65,7 +66,7 @@ EOF
 echo piranha > /etc/hostname
 printf "127.0.0.1 localhost\n127.0.1.1 piranha\n" > /etc/hosts
 
-# grupları oluştur (useradd -G patlar yoksa)
+# create the groups (useradd -G fails if they do not exist)
 for g in sudo video input audio dialout netdev; do
   getent group "$g" >/dev/null || groupadd "$g"
 done
@@ -75,7 +76,7 @@ id piranha >/dev/null 2>&1 || useradd -m -s /bin/bash piranha
 usermod -aG sudo,video,input,audio,dialout,netdev piranha
 echo "piranha:piranha" | chpasswd
 
-# systemd servisleri (containerda systemctl yok -> manuel symlink)
+# systemd services (no systemctl in the container -> manual symlinks)
 mkdir -p /etc/systemd/system/getty.target.wants \
          /etc/systemd/system/multi-user.target.wants
 ln -sf /lib/systemd/system/serial-getty@.service \
@@ -83,7 +84,7 @@ ln -sf /lib/systemd/system/serial-getty@.service \
 ln -sf /lib/systemd/system/ssh.service \
        /etc/systemd/system/multi-user.target.wants/ssh.service
 
-# KRİTİK: UART yok -> kalıcı journal + konsola aktar (SD karttan okuyabilelim)
+# CRITICAL: no UART -> persistent journal + forward to the console (so it can be read from the SD card)
 mkdir -p /var/log/journal /etc/systemd/journald.conf.d
 cat > /etc/systemd/journald.conf.d/persist.conf <<EOF
 [Journal]
@@ -108,11 +109,11 @@ Name=en* eth*
 DHCP=yes
 EOF
 
-# sudo izni
+# sudo permission
 echo "%sudo ALL=(ALL:ALL) ALL" > /etc/sudoers.d/piranha
 chmod 440 /etc/sudoers.d/piranha
 
-# swap (1GB RAM icin; Alpine akışında bu eski Debian scripti kullanılmaz)
+# swap (for 1 GB RAM; this old Debian script is not used in the Alpine flow)
 dd if=/dev/zero of=/swapfile bs=1M count=256 status=none
 chmod 600 /swapfile
 mkswap /swapfile >/dev/null
@@ -121,22 +122,22 @@ mkswap /swapfile >/dev/null
 sed -i "s/^# *en_US.UTF-8/en_US.UTF-8/" /etc/locale.gen 2>/dev/null || true
 '
 
-echo ">>> rootfs dışa aktarılıyor"
+echo ">>> exporting the rootfs"
 sudo rm -rf "$RFS"; sudo mkdir -p "$RFS"
 podman export "$CTR" | sudo tar -x -C "$RFS"
 
-echo ">>> konteyner temizliği"
+echo ">>> cleaning up the container"
 podman rm -f "$CTR"
 
-echo ">>> kernel modülleri kuruluyor"
+echo ">>> installing the kernel modules"
 source "$PRJ/scripts/00-env.sh"
 cd "$PRJ/kernel/linux"
 sudo make ARCH=arm CROSS_COMPILE="$CROSS_COMPILE" INSTALL_MOD_PATH="$RFS" modules_install 2>&1 | tail -3
 
-# --- podman export artıklarını düzelt ---
-# podman /etc/hostname, /etc/hosts, /etc/resolv.conf'u bind-mount eder;
-# export sırasında konteyner değerleri döner ya da dosya boşalır.
-echo ">>> konteyner artıkları düzeltiliyor"
+# --- fix leftovers from the podman export ---
+# podman bind-mounts /etc/hostname, /etc/hosts and /etc/resolv.conf;
+# during the export the container values come back or the files end up empty.
+echo ">>> fixing the container leftovers"
 echo piranha | sudo tee "$RFS/etc/hostname" >/dev/null
 sudo tee "$RFS/etc/hosts" >/dev/null <<'EOF'
 127.0.0.1	localhost
@@ -154,5 +155,5 @@ sudo rm -f "$RFS/.dockerenv" "$RFS/run/.containerenv" 2>/dev/null || true
 echo
 echo "ROOTFS_DONE: $RFS"
 sudo du -sh "$RFS"
-echo "Kontrol: $(sudo cat "$RFS/etc/os-release" | head -2 | tr '\n' ' ')"
-echo "GT811 modülü: $(sudo test -f "$RFS/lib/modules/"*/kernel/drivers/input/touchscreen/gt811.ko && echo VAR || echo YOK)"
+echo "Check: $(sudo cat "$RFS/etc/os-release" | head -2 | tr '\n' ' ')"
+echo "GT811 module: $(sudo test -f "$RFS/lib/modules/"*/kernel/drivers/input/touchscreen/gt811.ko && echo present || echo MISSING)"

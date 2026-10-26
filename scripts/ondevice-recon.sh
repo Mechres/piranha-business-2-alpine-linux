@@ -1,5 +1,5 @@
 #!/system/bin/sh
-# Cihaz üzerinde root olarak çalışır. Tek dosya => eski su ile uyumlu.
+# Runs on the device as root. A single file, compatible with old `su` implementations.
 echo "=== id ==="; id
 echo "=== version ==="; cat /proc/version
 echo "=== cpuinfo ==="; cat /proc/cpuinfo
@@ -12,22 +12,22 @@ echo "=== fb0 ==="; cat /sys/class/graphics/fb0/modes; cat /sys/class/graphics/f
 echo "=== disp ==="; ls /sys/class/disp 2>/dev/null; ls /sys/devices/platform
 echo "=== power ==="; ls /sys/class/power_supply/; cat /sys/class/power_supply/*/uevent
 echo "=== props ==="; getprop
-echo "=== script.bin adayları ==="
+echo "=== script.bin candidates ==="
 ls -l /boot/script.bin /system/vendor/script.bin /data/script.bin /mnt/sdcard/script.bin 2>/dev/null
-echo "=== /boot içeriği ==="; ls -l /boot 2>/dev/null
-echo "=== nanda mount denemesi ==="
+echo "=== /boot contents ==="; ls -l /boot 2>/dev/null
+echo "=== nanda mount attempt ==="
 mkdir -p /data/local/tmp/na
 mount -t vfat /dev/block/nanda /data/local/tmp/na 2>&1 || mount -o ro /dev/block/nanda /data/local/tmp/na 2>&1
 ls -l /data/local/tmp/na
 echo "=== DUMP: nanda ==="
 dd if=/dev/block/nanda of=/data/local/tmp/nanda.img bs=65536 2>&1
-echo "=== DUMP: script.bin (mount üzerinden) ==="
+echo "=== DUMP: script.bin (via the mount) ==="
 cp /data/local/tmp/na/script.bin /data/local/tmp/script.bin 2>&1
 cp /boot/script.bin /data/local/tmp/script.bin 2>&1
 ls -l /data/local/tmp/script.bin
-echo "=== DUMP: nand ilk 32MB ==="
+echo "=== DUMP: first 32 MB of nand ==="
 dd if=/dev/block/nand of=/data/local/tmp/nand-first32M.img bs=65536 count=512 2>&1
-echo "=== izinler ==="
+echo "=== permissions ==="
 chmod 666 /data/local/tmp/*.img /data/local/tmp/script.bin 2>/dev/null
 ls -l /data/local/tmp/
-echo "=== BITTI ==="
+echo "=== DONE ==="

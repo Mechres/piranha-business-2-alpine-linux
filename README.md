@@ -1,86 +1,117 @@
-# Piranha Business II Tab → Linux
+# Piranha Business II Tab → Alpine Linux
 
-**Cihaz:** Allwinner A10 (sun4i, Cortex-A8 @1.4GHz) · AXP209 · 1GB DDR3 · RTL8188CUS WiFi · Hynix H27UCG8 NAND (MLC) · **Goodix GT827** dokunmatik · 800×480 panel
-**Kart kimliği:** Softwinners `crane` / `crane-a702jhorange` · script.bin `A10-EVB-V1.1`
-**Hedef:** microSD'den boot eden, ekran + dokunmatik + ağ + ses çalışan çok hafif Alpine masaüstü (OpenRC + X11 + JWM)
+Mainline Linux (7.x) and Alpine on the Piranha Business II Tab, an Allwinner A10 tablet. The system boots from a microSD card; the internal NAND is never written, so removing the card brings Android back.
 
-## Altın kural
-NAND'a **hiçbir şey yazılmıyor.** A10 BROM sırası: SD → NAND → FEL.
-SD takılıysa SD'den boot eder, çıkarınca Android geri gelir.
+## Hardware
 
-## Güncel donanım durumu
-- Dokunmatik Linux tarafında **GT827** olarak çalışıyor (@i2c2 0x5D); Android vendor modülü `gt811_ts-827-fz` adını kullanıyor.
-- RAM: 1 GB DDR3; extracted FEX reports an older/incorrect 512 MB boot configuration
-- Panel: 800×480, mainline `starry,kr070pe2t` ile **birebir** eşleşiyor
+| | |
+|---|---|
+| SoC | Allwinner A10 (sun4i), single Cortex-A8 @ 1.4 GHz |
+| RAM | 1 GB DDR3 (the extracted FEX reports an older, incorrect 512 MB boot configuration) |
+| PMIC | AXP209 |
+| Storage | Hynix H27UCG8 MLC NAND (untouched), microSD slot |
+| Display | 800×480 LVDS panel, matches mainline `starry,kr070pe2t` exactly |
+| Touch | Goodix **GT827** on i2c2 @ 0x5D (INT = PH21, RESET = PB13) |
+| Wi-Fi | RTL8188CUS (USB `0bda:8176`), soldered inside the tablet, not a dongle |
+| Audio | `sun4i-codec` + external speaker amplifier controlled by PA10 |
+| Board ID | Softwinners `crane` / `crane-a702jhorange`, `script.bin` name `A10-EVB-V1.1` |
 
-GT827 sürücüsü ayrı bir repoda geliştirilmektedir:
-<https://github.com/Mechres/gt827-linux-driver>
+The Android vendor module for the touch controller is called `gt811_ts-827-fz`, but the chip is a GT827. The out-of-tree Linux driver lives in its own repository: <https://github.com/Mechres/gt827-linux-driver>.
 
-## Durum
-- [x] 0. Host ortamı: bootlin armhf gcc 13.3, dtc, podman, qemu-user-static, sunxi-tools, adb
-- [x] 1. Android keşif + `nanda.img` (16MB boot bölümü) yedeği + script.bin çıkarıldı
-- [x] 2. script.bin → `fex/tablet.fex` (966 satır) → panel/DRAM/i2c/GPIO parametreleri
-- [x] 3. **U-Boot derlendi** → `uboot/u-boot/u-boot-sunxi-with-spl.bin` (565 KB)
-- [x] 4. **Kernel derlendi** → `kernel/linux/arch/arm/boot/zImage` (5.8 MB) + modüller
-- [x] 5. **Özel DTS derlendi** → `sun4i-a10-piranha.dtb` (24 KB)
-- [x] 6. **GT827 sürücüsü yazıldı + derlendi** → `gt827.ko`, panel config seçimi ve koordinat kalibrasyonu
-- [x] 7. Alpine 3.20 armv7 rootfs, OpenRC, SSH, Wi-Fi ve X11/JWM hazır
-- [x] 8. SD karttan Alpine boot edildi
-- [x] 9. Wi-Fi, USB Ethernet ve SSH doğrulandı
-- [x] 10. ALSA codec ve PA10 hoparlör amplifikatörü doğrulandı
-- [x] 11. Lima GPU ve Cedrus VPU kernel sürücüleri doğrulandı
+## Golden rule
 
-## Çalıştırma sırası
+Nothing is written to the NAND. The A10 BROM boot order is SD → NAND → FEL, so with a card inserted the tablet boots from it, and without one it boots Android.
+
+## Status
+
+- [x] Host environment: Bootlin armhf GCC 13.3, dtc, podman, qemu-user-static, sunxi-tools, adb
+- [x] Android recon, backup of the 16 MB boot partition (`nanda.img`), `script.bin` extracted
+- [x] `script.bin` → `fex/tablet.fex` → panel / DRAM / i2c / GPIO parameters
+- [x] U-Boot built (`u-boot-sunxi-with-spl.bin`, written to sector 8 of the SD card)
+- [x] Mainline kernel and custom DTS (`sun4i-a10-piranha.dts`) built
+- [x] GT827 touchscreen driver written, with the panel config blob taken from the vendor module
+- [x] Alpine 3.20 armv7 rootfs: OpenRC, SSH, Wi-Fi, X11 + JWM
+- [x] Boot from SD verified; Wi-Fi, USB Ethernet and SSH verified
+- [x] ALSA codec and the PA10 speaker amplifier verified
+- [x] Lima (Mali-400) GPU and Cedrus VPU kernel drivers verified
+
+Known gap: the Cedrus VPU is registered as `/dev/video0`, but the Alpine FFmpeg/mpv userland does not yet use stateless V4L2 Request decoding, so video decoding is not hardware accelerated.
+
+## Quick start
+
+All scripts derive the project root from their own location, so they work under `sudo` as well.
+
 ```bash
-cd ~/projeler/piranha-a10
+cd /path/to/piranha-a10
 
-# Alpine rootfs
+# 1. Build the Alpine rootfs (stage 1 needs no root; stage 2 installs
+#    packages, OpenRC services and the kernel modules)
 bash scripts/45-alpine-stage1.sh
 sudo bash scripts/45-alpine-stage2.sh
 
-# 2) SD karta yaz — 'YAZ' onayı ister, iç diskleri reddeder
+# 2. Write the SD card. Verify the device with lsblk first: this ERASES it.
+#    The script asks you to type WRITE and refuses non-removable disks.
+lsblk -o NAME,SIZE,RM,MODEL,MOUNTPOINTS
 sudo bash scripts/50-sdcard-alpine.sh /dev/sdX
 ```
 
-## Podman/debootstrap notu (çözülmüş tuzak)
-Arch'ta `dpkg` kurulu olmadığı için `debootstrap` host mimarisini tanıyamıyor
-(`Unknown architecture: x86_64`). Çözüm: debootstrap yerine **podman + qemu-arm binfmt**
-ile resmi `debian:bookworm` armhf imajı. Doğrulandı: `uname -m`=armv7l, `dpkg
---print-architecture`=armhf.
+Kernel or Device Tree changes:
 
-Dikkat edilecekler:
-- `--arch` ile `--platform` birlikte kullanılamaz → sadece `--platform linux/arm/v7`
-- Konteynerde systemd çalışmaz → `systemctl enable` yerine elle symlink
-- `useradd -G` grup yoksa patlar → önce `groupadd`
-- `firmware-realtek` bookworm main'de yok (non-free) → çıkarıldı; gerekirse Android'den alınır
-- **podman `/etc/hostname`, `/etc/hosts`, `/etc/resolv.conf`'u bind-mount eder** →
-  export'ta hostname `debuerreotype` döner, hosts boşalır. Scriptler bunları düzeltiyor.
-
-## Klasör düzeni
-```
-backup/nanda.img          Android boot bölümü yedeği (16MB FAT16) — DOKUNMA
-fex/script.bin,tablet.fex script.bin + çözülmüş hali
-docs/01-donanim-bulgulari.md   tüm donanım haritası + fex→DTS çevrimi
-docs/02-oncul-arastirma.md     bizden önce deneyenlerin dersleri
-docs/recon.log            canlı Android sysfs dökümü
-dts/sun4i-a10-piranha.dts bizim device tree'miz
-uboot/piranha_a10_defconfig    U-Boot yapılandırması
-scripts/                  numaralı adım scriptleri
+```bash
+sudo bash scripts/30-kernel-build.sh
+sudo bash scripts/80-update-kernel.sh /dev/sdX
 ```
 
-Kernel, U-Boot, toolchain, rootfs ve derleme çıktıları `.gitignore` ile ana
-repo dışında tutulur. GT827 sürücüsü de ayrı reposundan alınmalıdır.
+`scripts/alpine-public/` contains a portable variant of the same flow plus on-tablet helpers (Wi-Fi service, audio service, desktop setup); see its [README](scripts/alpine-public/README.md).
 
-## DTS'te A721'den yaptığımız farklar
-1. **GT827 @0x5D** (FT5406 @0x38 yerine) — INT=PH21, RST=PB13, swapped-x-y + calibrated axes
-2. **`dr_mode = "host"`** — UART yok, USB klavye ilk boot'ta şart (A721'de "otg" idi ve çalışmıyordu)
-3. **HDMI etkin** — panel çalışmazsa tek teşhis kanalı
-4. **Ses amplifikatörü** — Android FEX'teki `audio_pa_ctrl = PA10`, DTS'te `allwinner,pa-gpios` olarak tanımlı
+## Repository layout
 
-## Ses doğrulama
+```
+backup/nanda.img               Android boot partition backup (16 MB FAT16) — do not touch
+fex/script.bin, tablet.fex     script.bin and its decoded form
+docs/01-hardware-findings.md   full hardware map and the FEX → DTS translation
+docs/02-prior-research.md      lessons from earlier attempts by others
+docs/03-gt827-driver-port.md   how the touchscreen driver was ported
+docs/critical-parameters.txt   key FEX parameters extracted by 20-fex-decode.sh
+docs/recon.log                 live Android sysfs dump
+dts/sun4i-a10-piranha.dts      the device tree
+gt811/                         early driver prototype and the vendor module data
+uboot/piranha_a10_defconfig    U-Boot configuration
+scripts/                       numbered step scripts (see below)
+HANDOFF.md                     engineering notes: decisions, pitfalls, workflow
+```
 
-Tablette `piranha` kullanıcısı `audio` grubunda olmalıdır. Mixer ayarlarını
-uygulayıp test etmek için:
+Kernel, U-Boot, toolchain, rootfs and build outputs are excluded by `.gitignore`. The GT827 driver is taken from its own repository.
+
+### Scripts
+
+| Script | Purpose |
+|---|---|
+| `00-env.sh` | `CROSS_COMPILE` and `PRJ` (derived from the script location) |
+| `10-android-recon.sh`, `ondevice-recon.sh` | Collect information from the running Android |
+| `20-fex-decode.sh` | Decode `script.bin` into `fex/tablet.fex` and `docs/critical-parameters.txt` |
+| `30-kernel-build.sh` | Build the kernel, DTB and modules |
+| `45-alpine-stage1.sh`, `45-alpine-stage2.sh` | Build the Alpine rootfs |
+| `50-sdcard-alpine.sh` | Partition and write the SD card |
+| `80-update-kernel.sh` | Update zImage, DTB and modules on an existing card (host-side `depmod -b`) |
+| `setup-pc-usb0.sh` | Configure the PC side of the USB Ethernet link |
+| `diag.sh` | Run on the tablet when SSH is unavailable; writes `/diag.txt` |
+| `fix-sd.sh` | Repair helper for a written card |
+
+**Legacy (Debian/systemd flow, superseded by Alpine):** `40-rootfs.sh`, `50-sdcard.sh`, `70-network.sh`, `90-wifi-setup.sh`. They are kept for reference and are marked as such in their headers.
+
+## Differences from the Topwise A721 DTS
+
+The DTS is based on the Topwise A721 (Pascal Roeleven, 2020). Changes:
+
+1. **GT827 @ 0x5D** instead of the FT5406 @ 0x38; INT = PH21, RESET = PB13, swapped X/Y and calibrated axes.
+2. **`dr_mode = "host"`**: there is no UART, so a USB keyboard was essential on the first boot. (The A721 used `otg`, which did not work here because of the ID pin.) The `g_ether` module forces the gadget side for USB Ethernet.
+3. **HDMI enabled**: the only diagnostic channel if the panel does not come up.
+4. **Speaker amplifier**: `audio_pa_ctrl = PA10` in the Android FEX is described in the DTS as `allwinner,pa-gpios`.
+
+## Audio
+
+The `piranha` user must be in the `audio` group. To enable the speaker path and test it:
 
 ```sh
 aplay -l
@@ -94,43 +125,54 @@ amixer -c 0 cset numid=17 1
 speaker-test -D hw:0,0 -c 2 -r 44100 -F S16_LE -t sine
 ```
 
-Mixer ayarlarını reboot sonrasında otomatik uygulamak için:
+To apply the mixer settings automatically at boot:
 
 ```bash
 scp scripts/alpine-public/audio-service.sh piranha@10.0.0.2:/tmp/
 ssh -t piranha@10.0.0.2 'sudo sh /tmp/audio-service.sh'
 ```
 
-## İlk boot: ne beklemeli
-UART olmadığı için teşhis planı:
-1. **Panel açılırsa** → tty1'de boot log'u göreceksin (`fbcon`, `ForwardToConsole=yes`)
-2. **Panel açılmazsa** → HDMI'a bağla (arşiv imajlarda HDMI çalıştığı doğrulanmış)
-3. **İkisi de yoksa** → SD'yi PC'ye tak, `/var/log/journal/` oku (kalıcı journal açık)
-4. WiFi/ethernet gelirse → `ssh piranha@<ip>` (şifre: `piranha`)
+## First boot and access
 
-Kullanıcılar: `root:piranha` ve `piranha:piranha` — **ilk boot sonrası değiştir.**
+There is no UART, so diagnosis relies on the screen and the SD card:
 
-## Kurtarma
-1. SD'yi çıkar → Android geri döner.
-2. Boot hiç olmazsa: SD'yi çıkar, USB tak → FEL modu (`lsusb` 1f3a:efe8) → `sunxi-fel version`
-3. Kararsızlık / `BUG: Bad page state` → DRAM saatini düşür: `uboot/piranha_a10_defconfig`'de
-   `CONFIG_DRAM_CLK=432` → `408` → `384`, U-Boot'u yeniden derle ve sadece sektör 8'i yaz.
+1. **Panel works**: the boot log appears on tty1 (fbcon).
+2. **Panel stays dark**: connect HDMI (known to work on archive images).
+3. **Neither**: put the card into a PC and read the logs; `scripts/diag.sh` writes a full report to `/diag.txt`.
+4. **Network up**: `ssh piranha@<ip>`. USB Ethernet is `10.0.0.2/24` on the tablet and `10.0.0.1/24` on the PC (see the route-conflict note in [HANDOFF.md](HANDOFF.md)).
 
-## Bilinen riskler
-| Risk | Durum |
+Default accounts are `root:piranha` and `piranha:piranha`. **Change both passwords after the first boot.**
+
+## Recovery
+
+1. Remove the SD card: Android boots again.
+2. If nothing boots at all, remove the card and connect USB: the tablet enters FEL mode (`lsusb` shows `1f3a:efe8`); check with `sunxi-fel version`.
+3. For instability or `BUG: Bad page state`, lower the DRAM clock: in `uboot/piranha_a10_defconfig` change `CONFIG_DRAM_CLK=432` to `408`, then `384`, rebuild U-Boot and rewrite only sector 8.
+
+## Known risks
+
+| Risk | Status |
 |---|---|
-| 🟢 GT827 sürücüsü | Out-of-tree sürücü çalışıyor; başka paneller için config/kalibrasyon değişebilir. |
-| 🟡 Panel timing | `starry,kr070pe2t` fex ile birebir eşleşti — risk düşük ama denenmedi |
-| 🟡 DRAM 432 MHz kararlılığı | fex değeri; benzer kartta 384 gerekmişti. Plan B hazır. |
-| 🟢 U-Boot / SD / AXP209 / WiFi / ALSA | Çalışıyor |
+| 🟢 GT827 driver | Out-of-tree driver works; other panels may need a different config blob or calibration |
+| 🟡 Panel timing | `starry,kr070pe2t` matches the FEX exactly, so the risk is low |
+| 🟡 DRAM @ 432 MHz | Value taken from the FEX; a similar board needed 384. Fallback described above |
+| 🟢 U-Boot / SD / AXP209 / Wi-Fi / ALSA | Working |
 
-## Beklenti
-Tek çekirdek A8 @1.4GHz + 1GB RAM + 800×480 = **hafif masaüstü/kiosk sınıfı**.
-JWM + pcmanfm + xterm kurulu. Chromium/Firefox kullanılabilir olmaz; netsurf/dillo düşün.
-Lima GPU kernel'de çalışıyor. Cedrus VPU `/dev/video0` olarak kayıtlı; mevcut Alpine
-FFmpeg/mpv kullanıcı alanı stateless Cedrus hızlandırmasını henüz kullanmıyor.
+## What to expect
 
-## Tam NAND yedeği hakkında dürüst not
-Android NAND'ı Allwinner tescilli FTL üzerinden blok aygıt olarak sunuyor (`nanda`…`nandj`);
-`/proc/mtd` ve ham `/dev/block/nand` yok. Yani **birebir Android geri-yükleme imajı elimizde değil** —
-sadece boot bölümü (`nanda.img`) var. NAND'a yazmadığımız için pratik risk yok, ama bilinsin.
+A single Cortex-A8 at 1.4 GHz, 1 GB RAM and 800×480 put this in the light desktop / kiosk class. JWM, PCManFM and XTerm are installed. Chromium and Firefox are not usable; consider NetSurf or Dillo. The Lima GPU driver works in the kernel; hardware video decoding is the open item described above.
+
+## Honest note on NAND backups
+
+Android exposes the NAND through Allwinner's proprietary FTL as block devices (`nanda`…`nandj`); there is no `/proc/mtd` and no raw `/dev/block/nand`. Only the boot partition (`nanda.img`) is backed up, so **there is no bit-exact Android restore image**. Since nothing is ever written to the NAND, the practical risk is nil, but it is worth knowing.
+
+## Legacy Debian notes
+
+The first rootfs attempt used Debian bookworm armhf and is superseded by Alpine. Pitfalls found on the way:
+
+- On Arch, `dpkg` is not installed, so `debootstrap` fails with `Unknown architecture: x86_64`. The fix was podman with qemu-arm binfmt and the official `debian:bookworm` armhf image.
+- `--arch` and `--platform` cannot be combined; use only `--platform linux/arm/v7`.
+- systemd does not run in the container, so units were enabled with manual symlinks.
+- `useradd -G` fails if the group does not exist; run `groupadd` first.
+- `firmware-realtek` is in non-free on bookworm; the firmware can be taken from Android instead.
+- podman bind-mounts `/etc/hostname`, `/etc/hosts` and `/etc/resolv.conf`, so after an export the hostname comes back as `debuerreotype` and `hosts` is empty. The legacy scripts repair this.

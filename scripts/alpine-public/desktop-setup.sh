@@ -2,7 +2,7 @@
 set -eu
 
 [ "$(id -u)" -eq 0 ] || {
-    echo "Bu script tablette root olarak calismali: sudo sh $0"
+    echo "This script must run on the tablet as root: sudo sh $0"
     exit 1
 }
 
@@ -28,4 +28,4 @@ cp /home/piranha/.xinitrc /root/.xinitrc
 chown piranha:piranha /home/piranha/.xinitrc
 chmod 755 /home/piranha/.xinitrc /root/.xinitrc
 
-echo "Masaustu hazir. USB klavye ile piranha olarak girip 'startx' calistir."
+echo "Desktop ready. Log in as piranha with a USB keyboard and run 'startx'."

@@ -3,22 +3,22 @@ set -euo pipefail
 
 DEV="${1:-}"
 [ -n "$DEV" ] || {
-    echo "Kullanim: sudo $0 <usb-network-interface>"
-    echo "Ornek:  sudo $0 enp15s0f3u1"
+    echo "Usage: sudo $0 <usb-network-interface>"
+    echo "Example: sudo $0 enp15s0f3u1"
     exit 2
 }
 
 ip link show "$DEV" >/dev/null 2>&1 || {
-    echo "HATA: arayuz bulunamadi: $DEV"
+    echo "ERROR: interface not found: $DEV"
     exit 1
 }
 
 ip link set "$DEV" up
 ip addr replace 10.0.0.1/24 dev "$DEV"
-# Host'ta başka bir arayüz aynı subnet'i kullanıyorsa USB'yi kesin seç.
+# If another host interface uses the same subnet, force the route over the USB interface.
 ip route replace 10.0.0.2/32 dev "$DEV" src 10.0.0.1
 
-echo "USB agi: $DEV -> 10.0.0.1/24"
+echo "USB network: $DEV -> 10.0.0.1/24"
 ip route get 10.0.0.2
 ping -c 1 10.0.0.2
 echo "SSH: ssh piranha@10.0.0.2"

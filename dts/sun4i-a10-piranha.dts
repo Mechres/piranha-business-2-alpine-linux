@@ -2,12 +2,12 @@
 /*
  * Piranha Business II Tab (Softwinners "crane" / crane-a702jhorange)
  * Allwinner A10 (sun4i) · 1 GB DDR3 · AXP209 · 800x480 starry,kr070pe2t
- * Goodix GT811 dokunmatik (i2c2 @0x5D) · RTL8188CUS USB WiFi
+ * Goodix GT827 touchscreen (i2c2 @0x5D) · RTL8188CUS USB WiFi
  *
- * Topwise A721 (Pascal Roeleven, 2020) temel alındı. Farklar:
- *   - dokunmatik: FT5406@0x38 yerine GT827@0x5D
- *   - usb_otg: dr_mode = "host"  (UART yok, USB klavye ilk boot'ta şart)
- *   - HDMI etkin (panel çalışmazsa tek teşhis kanalı)
+ * Topwise A721 (Pascal Roeleven, 2020) used as the base. Differences:
+ *   - touchscreen: GT827@0x5D instead of FT5406@0x38
+ *   - usb_otg: dr_mode = "host"  (no UART, a USB keyboard was essential on first boot)
+ *   - HDMI enabled (the only diagnostic channel if the panel does not work)
  */
 
 /dts-v1/;
@@ -53,7 +53,7 @@
 		};
 	};
 
-	/* HDMI yedek çıkış — UART olmadığı için teşhis kanalı */
+	/* HDMI fallback output — diagnostic channel since there is no UART */
 	hdmi-connector {
 		compatible = "hdmi-connector";
 		type = "a";
@@ -134,7 +134,7 @@
 &i2c1 {
 	status = "okay";
 
-	/* fex: dmard06 @0x1c + mma7660 @0x4c ikisi de listede, sysfs ikisini de gösteriyor */
+	/* fex: dmard06 @0x1c + mma7660 @0x4c both are listed, sysfs shows both */
 	accelerometer@4c {
 		compatible = "fsl,mma7660";
 		reg = <0x4c>;
@@ -145,13 +145,13 @@
 	status = "okay";
 
 	/*
-	 * Goodix GT827 @ 0x5D — HANDOFF (2026-08-20) kesin: çip GT827,
-	 * GT811 DEĞİL. INT = PH21, RESET = PB13 (fex ctp_*_b).
+	 * Goodix GT827 @ 0x5D — HANDOFF (2026-08-20) is definite: the chip is a GT827,
+	 * NOT a GT811. INT = PH21, RESET = PB13 (fex ctp_*_b).
 	 * fex: revert_y=1, exchange_x_y=1
 	 *
 	 * mainline goodix.c GT9xx ailesi — GT827'yi desteklemez. Out-of-tree
-	 * gt827.ko (drivers/input/touchscreen/gt827.c) yüklenince bind olur.
-	 * Yüklenmezse düğüm sessizce bağlanmaz — boot'u ETKİLEMEZ.
+	 * gt827.ko (drivers/input/touchscreen/gt827.c) binds once it is loaded.
+	 * If it is not loaded the node simply stays unbound — it does NOT affect boot.
 	 */
 	touchscreen@5d {
 		compatible = "goodix,gt827";
@@ -269,11 +269,11 @@
 };
 
 /*
- * OTG: hem host (USB klavye/mouse) hem gadget (g_ether USB-Ethernet) çalışsın.
- * dr_mode="host" iken gadget tarafı devre dışı kalıyordu (usb0 oluşmuyordu).
- * ID-pin algılaması kartta çalışmasa da, g_ether modülü gadget'ı zorlar.
- * Eski nota: A721'de otg idi ama ID-pin sorunu yüzünden klavye çalışmadı;
- * bunu çözmek için usb0_id_det-gpios (PH4) tanımlı.
+ * OTG: both host (USB keyboard/mouse) and gadget (g_ether USB Ethernet) should work.
+ * With dr_mode="host" the gadget side was disabled (usb0 never appeared).
+ * Even though ID-pin detection does not work on this board, the g_ether module forces the gadget.
+ * Earlier note: the A721 used otg, but the keyboard did not work because of an ID-pin problem;
+ * usb0_id_det-gpios (PH4) is defined to work around this.
  */
 &usb_otg {
 	dr_mode = "otg";

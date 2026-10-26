@@ -2,7 +2,7 @@
 set -eu
 
 [ "$(id -u)" -eq 0 ] || {
-    echo "Bu script tablette root olarak calismali: sudo sh $0"
+    echo "This script must run on the tablet as root: sudo sh $0"
     exit 1
 }
 
@@ -39,4 +39,4 @@ EOF
 chmod 755 /etc/init.d/wifi
 rc-update add wifi default
 rc-service wifi restart
-echo "Wi-Fi OpenRC servisi kuruldu."
+echo "Wi-Fi OpenRC service installed."

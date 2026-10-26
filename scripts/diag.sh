@@ -1,7 +1,7 @@
 #!/bin/sh
-# Tablet uzerinde CALISTIR (ssh yokken, klavye zorlarsa kopyala-yapistir):
+# RUN ON THE TABLET (when SSH is not available):
 #   sh /boot/diag.sh
-# Tum teşhis logunu /diag.txt'e yazar. SD'yi PC'ye alip Hermes okur.
+# Writes the whole diagnostic log to /diag.txt; read it by putting the SD card into a PC.
 LOG=/diag.txt
 : > "$LOG"
 echo "=== PIRANHA DIAG $(date) ===" >> "$LOG"
@@ -23,4 +23,4 @@ dmesg 2>/dev/null | grep -iE 'musb|udc|gadget|usb0|sunxi.*usb|eth' | tail -40 >>
 echo "--- GT811 ---" >> "$LOG"
 dmesg 2>/dev/null | grep -i gt811 >> "$LOG"
 echo "DONE -> $LOG" >> "$LOG"
-echo "DIAG YAZILDI: $LOG"
+echo "DIAG WRITTEN: $LOG"

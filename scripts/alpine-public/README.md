@@ -1,73 +1,66 @@
-# Piranha Business 2 Tab 9 - Alpine kurulum araçları
+# Piranha Business II Tab — Alpine setup tools
 
-Bu klasör, projeyi başka bir bilgisayarda veya başka bir kullanıcıyla
-tekrarlanabilir şekilde kurmak için hazırlanmış giriş noktalarını içerir.
+This folder holds portable entry points for reproducing the project on another computer or with another user.
 
-## Gereksinimler
+## Requirements
 
 - Linux host
 - `podman`, `qemu-user-static-binfmt`
-- ARM toolchain ve derlenmiş kernel/U-Boot
-- Yazılabilir bir microSD kart
+- ARM toolchain and a built kernel/U-Boot
+- A writable microSD card
 
-Scriptler proje kökünü kendi konumlarından bulur; `$HOME` veya sabit kullanıcı
-yollarına bağlı değildir.
+The scripts find the project root from their own location; they do not depend on `$HOME` or hard-coded user paths.
 
-## Önerilen akış
+## Recommended flow
 
 ```bash
 cd /path/to/piranha-a10
 
-# Rootfs hazırlığı; ilk adım sudo istemez
+# Rootfs preparation; the first step does not need sudo
 bash scripts/alpine-public/build-rootfs-stage1.sh
 
-# Paketler, OpenRC servisleri ve kernel modülleri
+# Packages, OpenRC services and kernel modules
 sudo bash scripts/alpine-public/build-rootfs-stage2.sh
 
-# DEV'i lsblk ile doğrula; bu işlem kartı siler
+# Verify DEV with lsblk; this ERASES the card
 lsblk -o NAME,SIZE,RM,MODEL,MOUNTPOINTS
 sudo bash scripts/alpine-public/write-sdcard.sh /dev/sdX
 ```
 
-SD açıldıktan sonra USB Ethernet için host bilgisayarda:
+After the card has booted, set up USB Ethernet on the host computer:
 
 ```bash
 sudo bash scripts/alpine-public/setup-usb-network.sh enp15s0f3u1
 ssh piranha@10.0.0.2
 ```
 
-Wi-Fi otomatik başlatma servisini tablete kurmak için dosyayı USB SSH veya
-Wi-Fi SSH üzerinden gönder:
+To install the Wi-Fi autostart service on the tablet, copy the script over USB SSH or Wi-Fi SSH:
 
 ```bash
 scp scripts/alpine-public/wifi-service.sh piranha@10.0.0.2:/tmp/
 ssh -t piranha@10.0.0.2 'sudo sh /tmp/wifi-service.sh'
 ```
 
-Wi-Fi SSID ve şifresi tablette şu dosyada bulunur:
-`/etc/wpa_supplicant/wpa_supplicant.conf`.
+The Wi-Fi SSID and password are stored on the tablet in `/etc/wpa_supplicant/wpa_supplicant.conf`.
 
-## Hafif masaüstü
+## Light desktop
 
-JWM + XTerm + PCManFM kurulumu için tablet üzerinde:
+To install JWM + XTerm + PCManFM, run on the tablet:
 
 ```bash
 scp scripts/alpine-public/desktop-setup.sh piranha@10.0.0.2:/tmp/
 ssh -t piranha@10.0.0.2 'sudo sh /tmp/desktop-setup.sh'
 ```
 
-USB klavye ile tablette `piranha` kullanıcısı olarak giriş yaptıktan sonra
-grafik oturumunu test etmek için:
+After logging in as `piranha` with a USB keyboard on the tablet, test the graphical session with:
 
 ```bash
 startx
 ```
 
-## Güvenlik
+## Safety
 
-`write-sdcard.sh` hedef diskteki tüm veriyi siler ve kendi onayını ister.
-Hedef aygıtı her zaman `lsblk` ile doğrula. Varsayılan parolaları ilk açılıştan
-sonra değiştir.
+`write-sdcard.sh` erases all data on the target disk and asks for its own confirmation. Always verify the target device with `lsblk`. Change the default passwords after the first boot.
 
 ## Kernel updates and Wi-Fi
 

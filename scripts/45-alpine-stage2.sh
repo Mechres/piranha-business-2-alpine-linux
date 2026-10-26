@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# ADIM 5b-STAGE2 (Alpine): podman container icinde apk + rc-update,
-# sonra export -> rootfs. modules_install sudo ile (cross-compile).
+# STEP 5b-STAGE2 (Alpine): run apk + rc-update inside a podman container,
+# then export it to the rootfs. modules_install runs with sudo (cross-compile).
 #
-# ONEMLI: Alpine musl oldugu icin duz `chroot` + qemu-arm binfmt guvenilmez
-# (PATH/loader sorunlari). Bunun yerine podman container icinde apk calistir.
+# IMPORTANT: Alpine uses musl, so a plain `chroot` + qemu-arm binfmt is unreliable
+# (PATH/loader problems). Run apk inside a podman container instead.
 #
-# KULLANIM: sudo bash scripts/45-alpine-stage2.sh
-# Onkosul: 45-alpine-stage1.sh ile rootfs/alpine (base + config) hazir.
+# USAGE: sudo bash scripts/45-alpine-stage2.sh
+# Prerequisite: rootfs/alpine (base + config) prepared by 45-alpine-stage1.sh.
 set -euo pipefail
 PRJ_DERIVED="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PRJ="$PRJ_DERIVED"
@@ -14,31 +14,31 @@ ALP_REL=3.20
 RFS="$PRJ/rootfs/alpine"
 CTR=piranha-alpine-apk
 
-[ -d "$RFS" ] || { echo "HATA: $RFS yok. Once 45-alpine-stage1.sh calistir."; exit 1; }
+[ -d "$RFS" ] || { echo "ERROR: $RFS does not exist. Run 45-alpine-stage1.sh first."; exit 1; }
 
-command -v podman >/dev/null || { echo "HATA: podman gerekli"; exit 1; }
+command -v podman >/dev/null || { echo "ERROR: podman is required"; exit 1; }
 ls /proc/sys/fs/binfmt_misc/qemu-arm >/dev/null 2>&1 || {
-  echo "HATA: qemu-arm binfmt kayitli degil."; exit 1; }
+  echo "ERROR: qemu-arm binfmt is not registered."; exit 1; }
 
-echo ">>> stage1 rootfs -> gecici container'a yukle (import)"
-# Mevcut rootfs'i bir image'e cevirip container'da apk calistiralim.
-# Yontem: rootfs'i bir dizin olarak bind mount'lu container ile degil,
-# podman image import edip calistir.
+echo ">>> stage1 rootfs -> load into a temporary container (import)"
+# Turn the existing rootfs into an image and run apk inside a container.
+# Method: import the rootfs as a podman image and run that,
+# instead of bind-mounting the directory into a container.
 TAR=/tmp/piranha-alpine-stage1.tar
-echo ">>> rootfs tar'laniyor (image import icin)"
+echo ">>> packing the rootfs into a tar (for the image import)"
 sudo tar -C "$RFS" -c -f "$TAR" . 2>/dev/null || tar -C "$RFS" -c -f "$TAR" .
-echo ">>> tar -> alpine image import (local, ID ile referans)"
+echo ">>> tar -> alpine image import (local, referenced by ID)"
 podman rm -f "$CTR" 2>/dev/null || true
 IMG=$(podman import "$TAR")
-echo ">>> import edilen image: $IMG"
-# localhost/ registry'ye push/pull yapmamak icin dogrudan image ID kullan
-# Host CA bundle'ini mount et (container'da /etc/ssl/certs bos oldugu icin
-# HTTPS repo 'temporary error' veriyordu). CachyOS'ta /etc/ssl/certs altindaki
-# hash'ler /etc/ca-certificates/extracted/cadir altina goreli symlink'tir;
-# yalnizca /etc/ssl/certs'i baglamak bu linkleri kirar.
-# --network=host: rootless slirp4netns container DNS/MTU'su host'tan izole
-#   patladigi icin (podman update sonrasi reboot edilmemis olabilir) host
-#   agini dogrudan paylasiyoruz. Boylece apk repo erisimi host ile ayni olur.
+echo ">>> imported image: $IMG"
+# Use the image ID directly so nothing is pushed/pulled via a localhost/ registry.
+# Mount the host CA bundle (the container's /etc/ssl/certs was empty, so
+# the HTTPS repositories failed with 'temporary error'). On CachyOS the hashes under /etc/ssl/certs
+# are symlinks relative to /etc/ca-certificates/extracted/cadir;
+# mounting only /etc/ssl/certs would break those links.
+# --network=host: the rootless slirp4netns container network (DNS/MTU) was isolated
+#   from the host and broke (possibly because the host was not rebooted after a podman update),
+#   so we share the host network directly. apk then reaches the mirrors exactly like the host does.
 HOST_CA=/etc/ssl/certs
 HOST_CA_ROOT=/etc/ca-certificates
 PODMAN_CA_ARGS=()
@@ -47,10 +47,10 @@ PODMAN_CA_ARGS=()
 podman run --name "$CTR" --platform linux/arm/v7 --network=host -d \
   "${PODMAN_CA_ARGS[@]}" "$IMG" sleep infinity
 
-echo ">>> CA bundle kontrol (mount sonrasi)"
-podman exec "$CTR" /bin/sh -c 'ls -l /etc/ssl/certs 2>/dev/null | head -3 || echo "CA DIZINI YOK"'
+echo ">>> CA bundle check (after the mount)"
+podman exec "$CTR" /bin/sh -c 'ls -l /etc/ssl/certs 2>/dev/null | head -3 || echo "NO CA DIRECTORY"'
 
-echo ">>> repositories: https + http(uk) fallback (CA mount ile https calisir)"
+echo ">>> repositories: https + http (uk) fallback (https works thanks to the CA mount)"
 podman exec "$CTR" /bin/sh -c '
 set -e
 cat > /etc/apk/repositories <<EOF
@@ -61,11 +61,11 @@ http://uk.alpinelinux.org/alpine/v3.20/community
 EOF
 '
 
-echo ">>> container icinde apk paket kurulumu (qemu emulasyonu)"
+echo ">>> installing packages with apk inside the container (qemu emulation)"
 podman exec "$CTR" /bin/sh -c '
 set -e
 export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-apk update || echo "WARN: apk update kismen basarisiz (main reset verdi), devam"
+apk update || echo "WARN: apk update partially failed (main mirror reset the connection), continuing"
 apk add --no-cache \
   openrc alpine-base \
   openssh sudo \
@@ -82,10 +82,10 @@ apk add --no-cache \
   libinput evtest \
   font-terminus tzdata kbd \
   util-linux pciutils usbutils nano less htop
-echo "apk tamam"
+echo "apk done"
 '
 
-echo ">>> kullanici + sifre (piranha/piranha)"
+echo ">>> user + password (piranha/piranha)"
 podman exec "$CTR" /bin/sh -c '
 set -e
 export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
@@ -104,7 +104,7 @@ echo "%wheel ALL=(ALL) ALL" > /etc/sudoers.d/wheel
 chmod 440 /etc/sudoers.d/wheel
 '
 
-echo ">>> SSH + OpenRC runlevel servisleri"
+echo ">>> SSH + OpenRC runlevel services"
 podman exec "$CTR" /bin/sh -c '
 export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 mkdir -p /etc/init.d
@@ -182,16 +182,16 @@ rc-update add wifi default 2>/dev/null || true
 rc-update add local default 2>/dev/null || true
 '
 
-echo ">>> container -> rootfs export (uzerine yaz)"
+echo ">>> container -> rootfs export (overwrites the old rootfs)"
 rm -rf "$RFS" 2>/dev/null || sudo rm -rf "$RFS"
 mkdir -p "$RFS"
 podman export "$CTR" | tar -x -C "$RFS"
 podman rm -f "$CTR"
-# stage1 config'leri export sonrasi tekrar uygula (export temizler mi? hayir,
-# ama emin olalim: net.usb0 keymaps modules-load zaten image'de kalici)
-# Eger eksikse stage1'i tekrar calistir.
+# Re-apply the stage1 configuration after the export? Not needed: the export keeps it
+# (net.usb0, keymaps and modules-load are already baked into the image).
+# If something is missing, run stage1 again.
 
-echo ">>> kernel modulleri kopyalaniyor (cross-compile, sudo)"
+echo ">>> installing the kernel modules (cross-compile, sudo)"
 source "$PRJ/scripts/00-env.sh"
 cd "$PRJ/kernel/linux"
 sudo make ARCH=arm CROSS_COMPILE="$CROSS_COMPILE" INSTALL_MOD_PATH="$RFS" modules_install 2>&1 | tail -3
@@ -199,8 +199,8 @@ sudo make ARCH=arm CROSS_COMPILE="$CROSS_COMPILE" INSTALL_MOD_PATH="$RFS" module
 echo
 echo "ROOTFS_DONE: $RFS"
 sudo du -sh "$RFS" 2>/dev/null || du -sh "$RFS"
-echo "GT827 modulu: $(sudo test -f "$RFS/lib/modules/"*/kernel/drivers/input/touchscreen/gt827.ko && echo VAR || echo YOK)"
-echo "RTL8192CU:    $(sudo test -f "$RFS/lib/modules/"*/kernel/drivers/net/wireless/realtek/rtlwifi/rtl8192cu/rtl8192cu.ko && echo VAR || echo YOK)"
-echo "g_ether:      $(sudo test -f "$RFS/lib/modules/"*/kernel/drivers/usb/gadget/legacy/g_ether.ko && echo VAR || echo YOK)"
-echo "runlevel net.usb0: $(ls "$RFS/etc/runlevels/default/net.usb0" 2>/dev/null && echo OK || echo YOK)"
-echo "runlevel sshd:     $(ls "$RFS/etc/runlevels/default/sshd" 2>/dev/null && echo OK || echo YOK)"
+echo "GT827 module: $(sudo test -f "$RFS/lib/modules/"*/kernel/drivers/input/touchscreen/gt827.ko && echo present || echo MISSING)"
+echo "RTL8192CU:      $(sudo test -f "$RFS/lib/modules/"*/kernel/drivers/net/wireless/realtek/rtlwifi/rtl8192cu/rtl8192cu.ko && echo present || echo MISSING)"
+echo "g_ether:        $(sudo test -f "$RFS/lib/modules/"*/kernel/drivers/usb/gadget/legacy/g_ether.ko && echo present || echo MISSING)"
+echo "runlevel net.usb0: $(ls "$RFS/etc/runlevels/default/net.usb0" 2>/dev/null && echo OK || echo MISSING)"
+echo "runlevel sshd:     $(ls "$RFS/etc/runlevels/default/sshd" 2>/dev/null && echo OK || echo MISSING)"

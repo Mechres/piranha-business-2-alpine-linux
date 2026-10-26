@@ -1,42 +1,43 @@
 #!/usr/bin/env bash
-# ADIM 6: SD kartı hazırla ve yaz.  *** BU SCRIPT SD KARTI SİLER ***
-# Kullanım: sudo bash 50-sdcard.sh /dev/sdX
+# [LEGACY - Debian flow, superseded by 50-sdcard-alpine.sh]
+# STEP 6: Prepare and write the SD card.  *** THIS SCRIPT ERASES THE SD CARD ***
+# Usage: sudo bash 50-sdcard.sh /dev/sdX
 set -euo pipefail
-# PRJ'yi script'in KENDİ konumundan türet.
-# ($HOME kullanmıyoruz: sudo altında $HOME=/root olur ve yollar bozulur.)
+# Derive PRJ from the script's own location.
+# (We do not use $HOME: under sudo it is /root and the paths would break.)
 PRJ="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-echo "Proje dizini: $PRJ"
-[ -n "${1:-}" ] || { echo "Kullanım: $0 /dev/sdX"; exit 1; }
+echo "Project directory: $PRJ"
+[ -n "${1:-}" ] || { echo "Usage: $0 /dev/sdX"; exit 1; }
 DEV="$1"
 RFS="$PRJ/rootfs/debian"
 
-# --- Gerekli dosyalar önceden kontrol edilsin (kartı boşuna silmeyelim) ---
+# --- Check the required files first (do not erase the card for nothing) ---
 UBOOT="$PRJ/uboot/u-boot/u-boot-sunxi-with-spl.bin"
 ZIMG="$PRJ/kernel/linux/arch/arm/boot/zImage"
 DTB="$PRJ/kernel/linux/arch/arm/boot/dts/allwinner/sun4i-a10-piranha.dtb"
 MKIMAGE="$PRJ/uboot/u-boot/tools/mkimage"
 for f in "$UBOOT" "$ZIMG" "$DTB" "$MKIMAGE"; do
-  [ -f "$f" ] || { echo "HATA: eksik dosya: $f"; exit 1; }
+  [ -f "$f" ] || { echo "ERROR: missing file: $f"; exit 1; }
 done
-[ -d "$RFS" ] || { echo "HATA: rootfs yok: $RFS  (önce bash scripts/40-rootfs.sh)"; exit 1; }
-echo "Tüm girdi dosyaları mevcut ✓"
+[ -d "$RFS" ] || { echo "ERROR: rootfs missing: $RFS  (run bash scripts/40-rootfs.sh first)"; exit 1; }
+echo "All input files are present ✓"
 
-# --- Güvenlik kontrolleri ---
-[ -b "$DEV" ] || { echo "HATA: $DEV blok aygıt değil"; exit 1; }
-case "$DEV" in *[0-9]) echo "HATA: bölüm değil, tüm diski ver (örn /dev/sde)"; exit 1;; esac
+# --- Safety checks ---
+[ -b "$DEV" ] || { echo "ERROR: $DEV is not a block device"; exit 1; }
+case "$DEV" in *[0-9]) echo "ERROR: give the whole disk, not a partition (e.g. /dev/sde)"; exit 1;; esac
 RM=$(lsblk -ndo RM "$DEV"); SIZE=$(lsblk -ndo SIZE "$DEV"); MODEL=$(lsblk -ndo MODEL "$DEV" || true)
-echo "Hedef: $DEV  boyut=$SIZE  çıkarılabilir=$RM  model=$MODEL"
-[ "$RM" = "1" ] || { echo "HATA: $DEV çıkarılabilir değil! İç diski korumak için iptal."; exit 1; }
+echo "Target: $DEV  size=$SIZE  removable=$RM  model=$MODEL"
+[ "$RM" = "1" ] || { echo "ERROR: $DEV is not removable! Aborting to protect internal disks."; exit 1; }
 SZB=$(blockdev --getsize64 "$DEV")
-[ "$SZB" -lt 137438953472 ] || { echo "HATA: 128GB'dan büyük — yanlış disk olabilir, iptal."; exit 1; }
-echo; echo "!!! $DEV ÜZERİNDEKİ TÜM VERİ SİLİNECEK !!!"
-read -rp "Devam için 'YAZ' yaz: " OK
-[ "$OK" = "YAZ" ] || { echo "iptal"; exit 1; }
+[ "$SZB" -lt 137438953472 ] || { echo "ERROR: larger than 128 GB — possibly the wrong disk, aborting."; exit 1; }
+echo; echo "!!! ALL DATA ON $DEV WILL BE ERASED !!!"
+read -rp "Type 'WRITE' to continue: " OK
+[ "$OK" = "WRITE" ] || { echo "aborted"; exit 1; }
 
-echo ">>> bağlı bölümleri ayır"
+echo ">>> unmounting mounted partitions"
 for p in "$DEV"?*; do umount "$p" 2>/dev/null || true; done
 
-echo ">>> bölümleme (p1=64MB FAT16 boot, p2=kalan ext4)"
+echo ">>> partitioning (p1 = 64 MB FAT16 boot, p2 = rest ext4)"
 wipefs -a "$DEV"
 sfdisk "$DEV" <<'EOF'
 label: dos
@@ -51,10 +52,10 @@ P1="${DEV}1"; P2="${DEV}2"
 mkfs.vfat -F16 -n PIRBOOT "$P1"
 mkfs.ext4 -F -L pirroot "$P2"
 
-echo ">>> U-Boot (sektör 8, NAND'a DOKUNMAZ)"
+echo ">>> U-Boot (sector 8, does NOT touch the NAND)"
 dd if="$UBOOT" of="$DEV" bs=1k seek=8 conv=fsync
 
-echo ">>> boot bölümü"
+echo ">>> boot partition"
 M=$(mktemp -d); mount "$P1" "$M"
 cp "$ZIMG" "$M/"
 cp "$DTB" "$M/"
@@ -62,10 +63,10 @@ cp "$PRJ/kernel/linux/arch/arm/boot/dts/allwinner/sun4i-a10-topwise-a721.dtb" "$
 
 # boot.cmd -> boot.scr
 #
-# console SIRASI ÖNEMLİ: son yazılan /dev/console olur (birincil).
-# UART'ımız lehimli DEĞİL, o yüzden tty0 (ekran) SONDA olmalı —
-# böylece boot mesajları panele düşer ve teşhis edebiliriz.
-# ttyS0 yine listede: ileride UART lehimlersen otomatik çalışır.
+# The ORDER of console= matters: the last one becomes /dev/console (the primary).
+# No UART is soldered, so tty0 (the screen) must come LAST —
+# that way the boot messages show on the panel and we can diagnose problems.
+# ttyS0 stays in the list: it works automatically if a UART is soldered later.
 cat > "$M/boot.cmd" <<'EOF'
 setenv bootargs console=ttyS0,115200 console=tty0 root=/dev/mmcblk0p2 rootwait rw panic=10 loglevel=7 ignore_loglevel consoleblank=0 fbcon=map:0
 load mmc 0:1 0x43000000 sun4i-a10-piranha.dtb
@@ -75,14 +76,14 @@ EOF
 "$MKIMAGE" -C none -A arm -T script -d "$M/boot.cmd" "$M/boot.scr"
 sync; umount "$M"
 
-echo ">>> rootfs kopyalanıyor (uzun sürer)"
+echo ">>> copying the rootfs (this takes a while)"
 mount "$P2" "$M"
 rsync -aHAX --numeric-ids --info=progress2 "$RFS"/ "$M"/
 
-# --- podman export artıklarını düzelt ---
-# podman /etc/hostname, /etc/hosts, /etc/resolv.conf'u bind-mount eder;
-# export sırasında bunlar konteyner değerleriyle döner veya boşalır.
-echo ">>> konteyner artıkları düzeltiliyor"
+# --- fix leftovers from the podman export ---
+# podman bind-mounts /etc/hostname, /etc/hosts and /etc/resolv.conf;
+# during the export they come back with the container values or end up empty.
+echo ">>> fixing the container leftovers"
 echo piranha > "$M/etc/hostname"
 cat > "$M/etc/hosts" <<'EOF'
 127.0.0.1	localhost
@@ -91,16 +92,16 @@ cat > "$M/etc/hosts" <<'EOF'
 ff02::1		ip6-allnodes
 ff02::2		ip6-allrouters
 EOF
-# systemd-resolved kullanmıyorsak sabit DNS iyi
+# a static DNS configuration is fine when systemd-resolved is not used
 cat > "$M/etc/resolv.conf" <<'EOF'
 nameserver 1.1.1.1
 nameserver 8.8.8.8
 EOF
 rm -f "$M/.dockerenv" "$M/run/.containerenv" 2>/dev/null || true
-echo "  hostname=$(cat "$M/etc/hostname")  hosts=$(wc -l < "$M/etc/hosts") satır"
+echo "  hostname=$(cat "$M/etc/hostname")  hosts=$(wc -l < "$M/etc/hosts") lines"
 
 sync; umount "$M"; rmdir "$M"
 
-echo; echo "TAMAM. SD hazır: $DEV"
-echo "Boot: SD'yi tablete tak, gücü ver. Ekran gelmezse SD'yi PC'de oku:"
-echo "  /var/log/journal  ve  dmesg  logları orada."
+echo; echo "DONE. SD card ready: $DEV"
+echo "Boot: insert the SD card into the tablet and power it on. If the screen stays dark, read the SD card on the PC:"
+echo "  /var/log/journal and the dmesg logs are there."

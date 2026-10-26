@@ -4,16 +4,16 @@
  *
  * Piranha Business II Tab / Softwinners "crane" — Allwinner A10
  *
- * Mainline'daki goodix.c GT9xx ailesini destekler; GT811 FARKLI bir protokol
- * kullanır (2-byte register adresi, 114-byte config blob, farklı veri düzeni),
- * bu yüzden ayrı sürücü gerekiyor.
+ * Mainline goodix.c supports the GT9xx family; the GT811 speaks a DIFFERENT protocol: it
+ * uses a 2-byte register address, a 114-byte config blob and a different data layout,
+ * so a separate driver is needed.
  *
- * Protokol kaynağı: allwinner-zh/linux-3.4-sunxi drivers/input/touchscreen/gt82x.c
- * Config blob: cihazda çalışan /system/vendor/modules/gt811_ts-827-fz.ko içinden
- *              çıkarıldı (bkz. gt811_cfg.h) — tahmin değil, cihazın kendi verisi.
+ * Protocol source: allwinner-zh/linux-3.4-sunxi drivers/input/touchscreen/gt82x.c
+ * Config blob: taken from the /system/vendor/modules/gt811_ts-827-fz.ko that runs on
+ *              the device (see gt811_cfg.h) — not a guess, the device's own data.
  *
- * Modernizasyon: earlysuspend -> dev_pm_ops, init-input.h kaldırıldı,
- * platform data -> device tree, tek dokunuş -> MT-B (slot) protokolü.
+ * Modernisation: earlysuspend -> dev_pm_ops, init-input.h removed,
+ * platform data -> device tree, single touch -> MT-B (slot) protocol.
  */
 
 #include <linux/delay.h>
@@ -34,9 +34,9 @@
 
 /* register adresleri (big-endian, 2 byte) */
 #define GT811_REG_DATA		0x8000	/* dokunma verisi */
-#define GT811_REG_VERSION	0x0f7d	/* chip id / sürüm (gt82x.c: read_chip_value={0x0f,0x7d}) */
+#define GT811_REG_VERSION	0x0f7d	/* chip id / version (gt82x.c: read_chip_value={0x0f,0x7d}) */
 
-/* okuma düzeni: 2 adres + 2 durum + 5*parmak + 1 checksum */
+/* read layout: 2 address + 2 status + 5*finger + 1 checksum */
 #define GT811_HEAD_LEN		4	/* adres echo(2) + finger(1) + key(1) */
 #define GT811_CONTACT_SIZE	5	/* x_h x_l y_h y_l w */
 
@@ -59,8 +59,8 @@ struct gt811_ts {
 };
 
 /*
- * GT811 2-byte big-endian register adresi kullanır.
- * Okuma: [addr_h addr_l] yaz, ardından veri oku (tek i2c_transfer, iki mesaj).
+ * GT811 uses a 2-byte big-endian register address.
+ * Read: write [addr_h addr_l], then read the data (one i2c_transfer, two messages).
  */
 static int gt811_read_reg(struct gt811_ts *ts, u16 reg, u8 *buf, int len)
 {
@@ -79,7 +79,7 @@ static int gt811_read_reg(struct gt811_ts *ts, u16 reg, u8 *buf, int len)
 	return 0;
 }
 
-/* Yazma: blob'un ilk 2 baytı zaten register adresi (0x0F80) */
+/* Write: the first 2 bytes of the blob are already the register address (0x0F80) */
 static int gt811_write_raw(struct gt811_ts *ts, const u8 *data, int len)
 {
 	struct i2c_msg msg = {
@@ -96,7 +96,7 @@ static int gt811_write_raw(struct gt811_ts *ts, const u8 *data, int len)
 
 /*
  * Okuma sonu komutu. gt82x.c i2c_end_cmd(): sadece 2 bayt
- * (register adresi 0x8000) yazılır — veri baytı yok.
+ * (register address 0x8000) is written — no data bytes.
  */
 static int gt811_end_cmd(struct gt811_ts *ts)
 {
@@ -110,7 +110,7 @@ static void gt811_reset(struct gt811_ts *ts)
 	if (!ts->gpiod_rst)
 		return;
 
-	/* aktif reset -> bekle -> bırak; gt82x.c 20ms/100ms kullanıyor */
+	/* assert reset -> wait -> release; gt82x.c uses 20ms/100ms */
 	gpiod_set_value_cansleep(ts->gpiod_rst, 1);
 	msleep(20);
 	gpiod_set_value_cansleep(ts->gpiod_rst, 0);
@@ -128,7 +128,7 @@ static int gt811_check_chip(struct gt811_ts *ts)
 	 */
 	ret = gt811_read_reg(ts, GT811_REG_VERSION, &id, 1);
 	if (ret) {
-		dev_err(&ts->client->dev, "chip id okunamadı: %d\n", ret);
+		dev_err(&ts->client->dev, "failed to read chip id: %d\n", ret);
 		return ret;
 	}
 	gt811_end_cmd(ts);
@@ -140,9 +140,9 @@ static int gt811_check_chip(struct gt811_ts *ts)
 			return 0;
 
 	/*
-	 * Chip id listede yoksa uyar ama devam et: farklı revizyonlar
-	 * aynı protokolü konuşuyor ve cihazımızda Android sürücüsü
-	 * çalıştığı için protokol doğru.
+	 * If the chip id is not in the list, warn but carry on: different revisions
+	 * speak the same protocol, and since the Android driver
+	 * works on our device, the protocol is correct.
 	 */
 	dev_warn(&ts->client->dev,
 		 "bilinmeyen chip id 0x%02x, yine de deniyorum\n", id);
@@ -153,7 +153,7 @@ static int gt811_send_cfg(struct gt811_ts *ts)
 {
 	int ret;
 
-	/* çözünürlüğü DT'den gelen değerlerle güncelle (blob 800x480 taşıyor) */
+	/* update the resolution with the values from the DT (the blob carries 800x480) */
 	ts->cfg[GT811_CFG_OFF_XMAX]     = ts->abs_x_max >> 8;
 	ts->cfg[GT811_CFG_OFF_XMAX + 1] = ts->abs_x_max & 0xff;
 	ts->cfg[GT811_CFG_OFF_YMAX]     = ts->abs_y_max >> 8;
@@ -161,11 +161,11 @@ static int gt811_send_cfg(struct gt811_ts *ts)
 
 	ret = gt811_write_raw(ts, ts->cfg, GT811_CFG_LEN);
 	if (ret) {
-		dev_err(&ts->client->dev, "config yazılamadı: %d\n", ret);
+		dev_err(&ts->client->dev, "failed to write config: %d\n", ret);
 		return ret;
 	}
 
-	/* gt82x.c goodix_init_panel() sırası: end_cmd, 10ms, 100ms */
+	/* gt82x.c goodix_init_panel() sequence: end_cmd, 10ms, 100ms */
 	gt811_end_cmd(ts);
 	msleep(10);
 	msleep(100);
@@ -195,7 +195,7 @@ static void gt811_report(struct gt811_ts *ts, const u8 *coor, u8 finger)
 		input_mt_report_slot_state(ts->input, MT_TOOL_FINGER, true);
 		/*
 		 * touchscreen_report_pos DT'deki swapped-x-y / inverted-x/y
-		 * özelliklerini uygular — fex'te revert_y=1, exchange_x_y=1.
+		 * properties applies — in the fex revert_y=1, exchange_x_y=1.
 		 */
 		touchscreen_report_pos(ts->input, &ts->prop, x, y, true);
 		input_report_abs(ts->input, ABS_MT_TOUCH_MAJOR, w);
@@ -213,7 +213,7 @@ static irqreturn_t gt811_irq(int irq, void *dev_id)
 	const u8 *coor;
 	int i, ret, need;
 
-	/* önce baş kısım + ilk parmak: 2 durum + 5 = 7 bayt yeter */
+	/* first the header + first finger: 2 status + 5 = 7 bytes are enough */
 	ret = gt811_read_reg(ts, GT811_REG_DATA, buf, 2 + GT811_CONTACT_SIZE + 1);
 	if (ret)
 		goto out;
@@ -221,7 +221,7 @@ static irqreturn_t gt811_irq(int irq, void *dev_id)
 	finger = buf[0];
 
 	if ((finger & GT811_STAT_MASK) != GT811_STAT_READY) {
-		/* veri hazır değil — sessizce çık */
+		/* data not ready — return silently */
 		goto out;
 	}
 
@@ -231,7 +231,7 @@ static irqreturn_t gt811_irq(int irq, void *dev_id)
 		goto out;
 
 	if (touch_num > 1) {
-		/* kalan parmakları da oku */
+		/* read the remaining fingers too */
 		need = 2 + GT811_CONTACT_SIZE * touch_num + 1;
 		ret = gt811_read_reg(ts, GT811_REG_DATA, buf, need);
 		if (ret)
@@ -246,7 +246,7 @@ static irqreturn_t gt811_irq(int irq, void *dev_id)
 			checksum += coor[i];
 
 		if (checksum != coor[GT811_CONTACT_SIZE * touch_num]) {
-			dev_dbg(&ts->client->dev, "checksum hatası\n");
+			dev_dbg(&ts->client->dev, "checksum error\n");
 			goto out;
 		}
 	}
@@ -307,7 +307,7 @@ static int gt811_probe(struct i2c_client *client)
 	i2c_set_clientdata(client, ts);
 	memcpy(ts->cfg, gt811_cfg_800x480, GT811_CFG_LEN);
 
-	/* varsayılan: blob'daki değerler; DT ile geçersiz kılınabilir */
+	/* default: the values from the blob; can be overridden via DT */
 	ts->abs_x_max = 800;
 	ts->abs_y_max = 480;
 	device_property_read_u32(dev, "touchscreen-size-x", (u32 *)&ts->abs_x_max);
@@ -317,25 +317,25 @@ static int gt811_probe(struct i2c_client *client)
 	if (IS_ERR(ts->vcc)) {
 		if (PTR_ERR(ts->vcc) != -ENODEV)
 			return dev_err_probe(dev, PTR_ERR(ts->vcc),
-					     "vcc alınamadı\n");
+					     "failed to get vcc\n");
 		ts->vcc = NULL;
 	}
 	if (ts->vcc) {
 		ret = regulator_enable(ts->vcc);
 		if (ret)
-			return dev_err_probe(dev, ret, "vcc açılamadı\n");
+			return dev_err_probe(dev, ret, "failed to enable vcc\n");
 	}
 
 	ts->gpiod_rst = devm_gpiod_get_optional(dev, "reset", GPIOD_OUT_LOW);
 	if (IS_ERR(ts->gpiod_rst))
 		return dev_err_probe(dev, PTR_ERR(ts->gpiod_rst),
-				     "reset gpio alınamadı\n");
+				     "failed to get reset gpio\n");
 
 	gt811_reset(ts);
 
 	ret = gt811_check_chip(ts);
 	if (ret)
-		return dev_err_probe(dev, ret, "GT811 bulunamadı\n");
+		return dev_err_probe(dev, ret, "GT811 not found\n");
 
 	ret = gt811_send_cfg(ts);
 	if (ret)
@@ -343,14 +343,14 @@ static int gt811_probe(struct i2c_client *client)
 
 	ret = gt811_input_init(ts);
 	if (ret)
-		return dev_err_probe(dev, ret, "input kaydı başarısız\n");
+		return dev_err_probe(dev, ret, "input registration failed\n");
 
 	ret = devm_request_threaded_irq(dev, client->irq, NULL, gt811_irq,
 					IRQF_ONESHOT, client->name, ts);
 	if (ret)
-		return dev_err_probe(dev, ret, "irq %d alınamadı\n", client->irq);
+		return dev_err_probe(dev, ret, "failed to request irq %d\n", client->irq);
 
-	dev_info(dev, "GT811 hazır: %ux%u, irq %d\n",
+	dev_info(dev, "GT811 ready: %ux%u, irq %d\n",
 		 ts->abs_x_max, ts->abs_y_max, client->irq);
 	return 0;
 }

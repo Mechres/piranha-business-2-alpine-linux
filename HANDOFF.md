@@ -1,119 +1,119 @@
-# Piranha A10 — Handoff (sıradaki session için)
+# Piranha A10 — Engineering Notes
 
-**Tarih:** 2026-08-20 (güncelleme: Alpine + GT827 + Wi-Fi + ses TAMAMLANDI)
-**Kullanıcı:** Yağız (mechres), Türkçe yanıt istiyor, klavye eziyeti çekiyor (TR layout).
+Last updated: 2026-08-20 (Alpine + GT827 + Wi-Fi + audio complete). These notes record decisions, pitfalls and the working procedure for anyone picking the project up. See [README.md](README.md) for the overview.
 
----
+## Goal
 
-## HEDEF
-Allwinner A10 "Piranha Business II Tab" tablete mainline Linux. Hafif dokunmatik+ekranlı masaüstü (X11+JWM) + **çalışan ağ** (USB Ethernet g_ether öncelik, WiFi RTL8188CUS ikincil). SD'den boot, NAND'a asla yazma.
+Mainline Linux on the Allwinner A10 "Piranha Business II Tab": a light touchscreen desktop (X11 + JWM) with **working networking** (USB Ethernet via `g_ether` first, the RTL8188CUS Wi-Fi second). Boot from SD, never write to the NAND.
 
-## ANA DONANIM (kesin)
-- SoC: Allwinner A10 (sun4i), Cortex-A8 1.4GHz, 1GB RAM
-- PMIC: AXP209 | Panel: 800x480 (starry/kr070pe2t) | DRM: sun4i-drm + LCDC
-- Touch: **goodix GT827** i2c-2 / 0x5d, INT=PH21 RST=PB13
-- WiFi: **RTL8188CUS** (0bda:8176) — tablet İÇİNDE gömülü USB (dongle DEĞİL)
-- 2x USB: biri OTG (microUSB, gadget), biri host (USB-A, klavye)
-- SD: /dev/sdc (host'ta, her takışta değişebilir)
-- UART bulunamadı → ekran + SD journal ile teşhis
+## Hardware (confirmed)
 
-## NE YAPILDI (çalışıyor)
-- [x] U-Boot: `u-boot-sunxi-with-spl.bin` (565K) — sektör 8'e yazar, NAND'a dokunmaz
-- [x] Kernel 7.2.0 mainline derlendi (zImage 6.7MB), toolchain: bootlin armv7-eabihf gcc 13.3
-- [x] **GT827 dokunmatik sürücüsü YAZILDI + DERLENDİ**: `kernel/linux/drivers/input/touchscreen/gt827.c` + `gt827_cfg.h`. Gerçek cihaz config blob'u (`gt811/android-ko/cfg_A.bin`, 114B) gömülü. `compatible="goodix,gt827"`. `make modules` ile `gt827.ko` üretildi (vermagic 7.2.0-gcb8a75eec087-dirty — kernel ile eşleşiyor).
-- [x] **DTS GT827'ye çevrildi**: `dts/sun4i-a10-piranha.dts` + kernel ağacı kopyası `compatible="goodix,gt827"`. dtbs derlendi (`sun4i-a10-piranha.dtb`, 24KB).
-- [x] **WiFi modülü RTL8192CU derlendi**: `.config`'e `CONFIG_WLAN=y`, `CONFIG_CFG80211=y`, `CONFIG_MAC80211=y`, `CONFIG_RTL8192CU=m` ve ilgili RTLWIFI seçenekleri eklendi. Firmware `rootfs/firmware/rtl8192cufw*.bin` hazır.
-- [x] **g_ether (USB ETH) modülü hazır**: `CONFIG_USB_ETH=m` (zaten vardı) → `g_ether.ko`.
-- [x] Debian 12 bookworm armhf rootfs BOOT EDİYOR (eski; Alpine lehine terk edildi).
-- [x] **Alpine 3.20 armhf (armv7) rootfs kuruldu**: `scripts/45-alpine-rootfs.sh` (OpenRC + musl). X11+JWM, openssh, wpa_supplicant, evtest/libinput, TR keymap. `rootfs/alpine/`.
-- [x] **OpenRC servisleri enable**: sshd, net.usb0 (statik 10.0.0.2/24), keymaps (trq), modules (g_ether + gt827 bootta), networking, local.
-- [x] **Alpine SD yazma scripti**: `scripts/50-sdcard-alpine.sh` (systemd yok, OpenRC runlevel symlink'leri korunur).
-- [x] sudo şifresi düzeltildi (fix-sd.sh ile shadow hash PAM'sız yenilendi)
+- SoC: Allwinner A10 (sun4i), Cortex-A8 @ 1.4 GHz, 1 GB RAM
+- PMIC: AXP209 · Panel: 800×480 (starry/kr070pe2t) · DRM: sun4i-drm + LCDC
+- Touch: **Goodix GT827** on i2c-2 / 0x5d, INT = PH21, RST = PB13
+- Wi-Fi: **RTL8188CUS** (0bda:8176), a USB device soldered inside the tablet, not a dongle
+- 2× USB: one OTG (micro-USB, gadget), one host (USB-A, keyboard)
+- No UART found, so diagnosis uses the screen and the SD card logs
 
-## BROKEN / ÇÖZÜLMEYEN
-**Güncel durum:** Temel sistem artık çalışıyor. Bilinen ana eksik, Cedrus stateless V4L2 Request API'sini kullanan FFmpeg/mpv kullanıcı alanı desteğidir.
-1. **Cedrus kullanıcı alanı entegrasyonu** — kernel `cedrus` sürücüsü `/dev/video0` olarak kayıtlıdır; Alpine FFmpeg/mpv mevcut haliyle stateless V4L2 Request decode kullanmıyor.
-2. **Systemd worker kilitlenmesi (GEÇMİŞTE kaldı)**: Alpine+OpenRC ile rc.local/systemd-worker TUZAĞI YOK. net.usb0 OpenRC servisiyle statik IP.
-3. **Wi-Fi**: `CONFIG_WLAN`, `CONFIG_CFG80211`, `CONFIG_MAC80211` ve `CONFIG_RTL8192CU=m` ile kernel modülü çalışıyor. `80-update-kernel.sh` host-side `depmod -b` ile bağımlılık dosyalarını üretmelidir.
-4. **USB Ethernet rota çakışması (ÇÖZÜMÜ BİLİNİYOR)**: PC'deki `enp15s0f3u1` USB arayüzü ve `enp10s0` aynı `10.0.0.0/24` ağıyla çakışabiliyor. `ip route get 10.0.0.2` yanlışlıkla `enp10s0` gösterirse ping/SSH USB üzerinden gitmez. Çözüm:
+## What works
+
+- [x] U-Boot: `u-boot-sunxi-with-spl.bin` (565 KB), written to sector 8; does not touch the NAND
+- [x] Mainline kernel 7.2.0 built with the Bootlin armv7-eabihf GCC 13.3 toolchain
+- [x] **GT827 touchscreen driver** (`gt827.c` + `gt827_cfg.h`, in the separate repository). It embeds the real device config blob (`gt811/android-ko/cfg_A.bin`, 114 B), `compatible = "goodix,gt827"`, built as `gt827.ko`.
+- [x] **DTS** `dts/sun4i-a10-piranha.dts` uses `goodix,gt827`; the DTB builds.
+- [x] **Wi-Fi**: `CONFIG_WLAN=y`, `CONFIG_CFG80211=y`, `CONFIG_MAC80211=y`, `CONFIG_RTL8192CU=m` plus the related RTLWIFI options. Firmware in `rootfs/firmware/rtl8192cufw*.bin`.
+- [x] **USB Ethernet**: `CONFIG_USB_ETH=m` → `g_ether.ko`.
+- [x] **Alpine 3.20 armv7 rootfs** (OpenRC, musl) built by `scripts/45-alpine-stage1.sh` and `45-alpine-stage2.sh`: X11 + JWM, openssh, wpa_supplicant, evtest/libinput, Turkish Q keymap.
+- [x] **OpenRC services** enabled: sshd, net.usb0 (static 10.0.0.2/24), keymaps (`trq`), modules (`g_ether` + `gt827` at boot), networking, local, wifi.
+- [x] **SD writer for Alpine**: `scripts/50-sdcard-alpine.sh` (no systemd; OpenRC runlevel symlinks are preserved).
+- [x] The earlier Debian 12 bookworm armhf rootfs booted too, but was dropped in favour of Alpine.
+
+## Open issues and notes
+
+1. **Cedrus userspace**: the kernel `cedrus` driver registers `/dev/video0`, but the Alpine FFmpeg/mpv build does not use stateless V4L2 Request decoding. This is the main remaining gap.
+2. **Systemd worker lock-up (historical)**: seen with the Debian image only. Alpine + OpenRC has no rc.local/systemd-worker trap; the static IP comes from the `net.usb0` OpenRC service.
+3. **Wi-Fi** works with the options listed above. `80-update-kernel.sh` must generate the dependency files with a host-side `depmod -b`.
+4. **USB Ethernet route conflict (known fix)**: the PC's USB interface (`enp15s0f3u1`) and its onboard NIC (`enp10s0`) can end up on the same `10.0.0.0/24` network. If `ip route get 10.0.0.2` shows the wrong interface, ping/SSH will not go over USB. Fix:
    ```bash
    sudo ip addr replace 10.0.0.1/24 dev enp15s0f3u1
    sudo ip route replace 10.0.0.2/32 dev enp15s0f3u1 src 10.0.0.1
    ip route get 10.0.0.2
    ```
-   Son komut `dev enp15s0f3u1` göstermeli. Kalıcı çözüm, `enp10s0` üzerinde `10.0.0.0/24` kullanmamak veya USB ağı için farklı bir subnet seçmektir. Tablet tarafı `usb0=10.0.0.2/24`, PC USB arayüzü `10.0.0.1/24`.
-5. **Ses**: `sun4i-codec` ve hoparlör playback çalışıyor. Harici amplifikatör PA10 GPIO'su DTS'te tanımlı; mixer ayarları README'de yer alıyor.
-6. **Klavye TR layout**: Alpine `keymaps` servisi `trq` ile çözüldü.
+   The last command must show `dev enp15s0f3u1`. A lasting fix is to avoid using `10.0.0.0/24` on the onboard NIC, or to pick another subnet for the USB link. The tablet side is `usb0 = 10.0.0.2/24`, the PC USB interface `10.0.0.1/24`.
+5. **Audio**: `sun4i-codec` and speaker playback work. The external amplifier GPIO (PA10) is in the DTS; the mixer settings are in the README.
+6. **Keyboard layout**: the Alpine `keymaps` service with `trq` handles the Turkish Q layout.
 
-## KRİTİK KARARLAR
-- **Debian → Alpine GEÇİLDİ**: Alpine (OpenRC, musl) daha hafif ve bu cihaz için daha uygun. YAPILDI.
-- WiFi: Alpine OpenRC `wifi` servisi ile bootta otomatik başlıyor.
-- GT811 → GT827: sürücü `gt827.c` olarak YAZILDI (gt811.c kernel ağacından SİLİNDİ).
+## Key decisions
 
-## DOSYA YAPISI (~/projeler/piranha-a10/)
-- `kernel/linux/` → mainline kernel ağacı (patched .config, DTS kopyası, **gt827.c/gt827_cfg.h touchscreen altında**)
-- `uboot/u-boot/` → U-Boot (u-boot-sunxi-with-spl.bin hazır)
-- `dts/sun4i-a10-piranha.dts` → KAYNAK DTS (ARTIK DERLENİYOR, GT827 compatible)
-- GT827 sürücüsü → ayrı repo: https://github.com/Mechres/gt827-linux-driver
-- `gt811/android-ko/` → orijinal Android modül + cfg_*.bin/fw_gt811.bin (ALTIN DEĞER, gerçek cihaz verisi)
-- `scripts/00-env.sh` → CROSS_COMPILE, PRJ (sudo altında $HOME tuzağı, PRJ BASH_SOURCE'ten)
-- `scripts/30-kernel-build.sh` → kernel derleme
-- `scripts/80-update-kernel.sh` → zImage, DTB, modüller ve host-side depmod
-- `scripts/45-alpine-rootfs.sh` → **YENİ** Alpine rootfs (OpenRC)
-- `scripts/50-sdcard-alpine.sh` → **YENİ** SD yazma (Alpine)
-- `scripts/40-rootfs.sh` (eski Debian), `50-sdcard.sh` (eski Debian) — ARTık kullanılmaz
-- `scripts/70-network.sh` `90-wifi-setup.sh` (eski Debian) — Alpine'da gerekmez
-- `rootfs/firmware/` → rtl8192cufw*.bin (4 dosya, RTL8188CUS firmware)
-- `rootfs/alpine/` → **YENİ** Alpine rootfs (modules_install SONRASI hazır)
-- `backup/` → Android nanda.img (boot bölümü yedeği)
+- **Debian → Alpine**: Alpine (OpenRC, musl) is lighter and fits this device better. Done.
+- Wi-Fi starts automatically at boot through an Alpine OpenRC `wifi` service.
+- GT811 → GT827: the driver was written as `gt827.c`; `gt811.c` was removed from the kernel tree. `gt811/gt811.c` in this repository is an early prototype.
 
-## KERNEL DERLEME (gerekirse tekrar)
+## File layout
+
+- `kernel/linux/`: mainline kernel tree (patched `.config`, DTS copy, **gt827.c / gt827_cfg.h under touchscreen**); not tracked
+- `uboot/u-boot/`: U-Boot tree (`u-boot-sunxi-with-spl.bin` built); not tracked
+- `dts/sun4i-a10-piranha.dts`: the source DTS (compiles, GT827 compatible)
+- GT827 driver: separate repository <https://github.com/Mechres/gt827-linux-driver>
+- `gt811/android-ko/`: the original Android module and `cfg_*.bin` / `fw_gt811.bin` (real device data, valuable)
+- `scripts/00-env.sh`: `CROSS_COMPILE` and `PRJ`; `PRJ` is derived from `BASH_SOURCE` because `$HOME` becomes `/root` under sudo
+- `scripts/30-kernel-build.sh`: kernel build
+- `scripts/80-update-kernel.sh`: zImage, DTB and modules plus host-side depmod
+- `scripts/45-alpine-stage1.sh`, `45-alpine-stage2.sh`: Alpine rootfs (OpenRC)
+- `scripts/50-sdcard-alpine.sh`: SD writer for Alpine
+- `scripts/40-rootfs.sh`, `50-sdcard.sh`: legacy Debian, no longer used
+- `scripts/70-network.sh`, `90-wifi-setup.sh`: legacy Debian, not needed on Alpine
+- `rootfs/firmware/`: `rtl8192cufw*.bin` (4 files, RTL8188CUS firmware)
+- `rootfs/alpine/`: the Alpine rootfs (ready after `modules_install`)
+- `backup/`: Android `nanda.img` (boot partition backup)
+
+## Rebuilding the kernel
+
 ```bash
-cd ~/projeler/piranha-a10/kernel/linux
-source ~/projeler/piranha-a10/scripts/00-env.sh
+cd /path/to/piranha-a10/kernel/linux
+source ../../scripts/00-env.sh
 make ARCH=arm CROSS_COMPILE=arm-buildroot-linux-gnueabihf- zImage dtbs modules -j$(nproc)
-# GT827/RTL8192CU/g_ether modülleri:
+# GT827 / RTL8192CU / g_ether modules:
 #   drivers/input/touchscreen/gt827.ko
 #   drivers/net/wireless/realtek/rtlwifi/rtl8192cu/rtl8192cu.ko
 #   drivers/usb/gadget/legacy/g_ether.ko
 ```
 
-Önerilen güncel yol:
+Preferred route:
 
 ```bash
 sudo bash scripts/30-kernel-build.sh
 sudo bash scripts/80-update-kernel.sh /dev/sdX
 ```
 
-`30-kernel-build.sh` proje yolunu script konumundan türetir; `sudo` altında
-`/root/projeler/...` hatası vermemelidir. Wi-Fi bağımlılıkları kernel config'e
-eklenmiştir. Ses için kernel DTS'te `allwinner,pa-gpios` PA10 tanımı bulunur.
+`30-kernel-build.sh` derives the project path from the script location, so it works under `sudo` without `/root/...` path errors. The Wi-Fi dependencies are in the kernel config, and the DTS carries the PA10 `allwinner,pa-gpios` definition for audio.
 
-## DC ÇALIŞTIRACAK ADIMLAR (sudo gerekir)
+## Steps that need sudo
+
 ```bash
-# 1) Kernel modüllerini Alpine rootfs'a kopyala (Hermes sudo yapamaz)
-cd ~/projeler/piranha-a10
+# 1) Install the kernel modules into the Alpine rootfs
+cd /path/to/piranha-a10
 source scripts/00-env.sh
 cd kernel/linux
 sudo make ARCH=arm CROSS_COMPILE=$CROSS_COMPILE INSTALL_MOD_PATH=../rootfs/alpine modules_install
 
-# 2) SD'ye yaz (DEV=/dev/sdX — her seferinde lsblk ile doğrula!)
+# 2) Write the SD card (DEV=/dev/sdX — verify with lsblk every time!)
 sudo bash scripts/50-sdcard-alpine.sh /dev/sdX
 
-# 3) Tablette test:
+# 3) Test on the tablet:
 #   dmesg | grep -E 'gt827|rtl|g_ether|usb0'
 #   ssh piranha@10.0.0.2   (PC: ip addr add 10.0.0.1/24 dev enp15s0f3u1)
-#   WiFi: sudo wifi-connect.sh  (sonra /etc/wpa_supplicant/wpa_supplicant.conf doldur)
+#   Wi-Fi: sudo wifi-connect.sh, then fill in /etc/wpa_supplicant/wpa_supplicant.conf
 ```
 
-## HOST ORTAMI
-- CachyOS/Arch, mechres. Sudo şifresi bilinmiyor (kullanıcı sudo YAPABİLİYOR, ben yapamıyorum).
-- SD rootfs (ext4) root-owned → ben sudo'suz yazamam, kullanıcı `sudo bash script.sh` çalıştırır.
-- Boot bölümü (FAT16) udisks ile mechres sahipli mount ediliyor → ben yazabiliyorum.
-- USB Ethernet PC tarafı: `enp15s0f3u1` (tablet takınca belirir), `enp10s0` = kendi Ethernet'in.
+## Host environment notes
 
-## KULLANICI NOTLARI
-- SD kart çıkar-tak + tablet aç döngüsünden nefret ediyor → uzaktan (SSH) çözüm şart.
-- Klavye TR → Alpine `keymaps` (trq) ile çözüldü.
-- "Tableti kırıp atmama az kaldı" → sabırsız, net ve çalışan adım ister, tahmin istemez.
-- Çıktıları SD'ye `/diag.txt` yazıp ben okuyabiliyorum (en iyi teşhis yolu).
+- Developed on CachyOS/Arch.
+- The SD card rootfs (ext4) is root-owned, so writing to it needs `sudo bash script.sh`.
+- The boot partition (FAT16) is mounted by udisks with user ownership, so it can be written without root.
+- USB Ethernet on the PC side: `enp15s0f3u1` (appears when the tablet is connected); `enp10s0` is the onboard Ethernet.
+
+## Working tips
+
+- The SD-card swap + reboot loop is slow, so prefer remote (SSH) workflows.
+- When SSH is unavailable, run `scripts/diag.sh` on the tablet: it writes `/diag.txt` to the SD card, which can be read on the PC. This has been the most useful diagnostic route.

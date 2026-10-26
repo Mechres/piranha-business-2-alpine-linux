@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ADIM 4: Mainline kernel derle (sunxi_defconfig + ekstralar)
+# STEP 4: Build the mainline kernel (sunxi_defconfig + extras)
 set -euo pipefail
 PRJ="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # Derive the project path from this script; sudo changes HOME to /root.
@@ -9,7 +9,7 @@ cd "$PRJ/kernel/linux"
 
 make sunxi_defconfig
 
-# Ekstra config (crane/piranha için)
+# Extra configuration (for crane/piranha)
 cat >> .config <<'EOF'
 # --- Display / panel (starry,kr070pe2t) ---
 CONFIG_DRM_SUN4I=y
