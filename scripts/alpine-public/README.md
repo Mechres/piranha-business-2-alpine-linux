@@ -67,7 +67,7 @@ startx
 For a kernel or Device Tree change, build and update the SD card from the host:
 
 ```bash
-sudo bash scripts/30-kernel-build.sh
+bash scripts/30-kernel-build.sh
 sudo bash scripts/80-update-kernel.sh /dev/sdX
 ```
 

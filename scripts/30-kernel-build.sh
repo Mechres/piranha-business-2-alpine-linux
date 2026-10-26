@@ -5,7 +5,16 @@ PRJ="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # Derive the project path from this script; sudo changes HOME to /root.
 # shellcheck source=scripts/00-env.sh
 source "$PRJ/scripts/00-env.sh"
-cd "$PRJ/kernel/linux"
+KERNEL_SRC="${KERNEL_SRC:-$PRJ/kernel/linux}"
+[ -f "$KERNEL_SRC/Makefile" ] || { echo "ERROR: no kernel tree at $KERNEL_SRC (run scripts/fetch-sources.sh)"; exit 1; }
+cd "$KERNEL_SRC"
+
+# Install the board device tree into the tree and register it in the Makefile
+DTS_DIR=arch/arm/boot/dts/allwinner
+cp "$PRJ/dts/sun4i-a10-piranha.dts" "$DTS_DIR/sun4i-a10-piranha.dts"
+grep -q 'sun4i-a10-piranha.dtb' "$DTS_DIR/Makefile" || \
+    sed -i 's/^\tsun4i-a10-topwise-a721.dtb$/\tsun4i-a10-piranha.dtb \\\n&/' "$DTS_DIR/Makefile"
+grep -q 'sun4i-a10-piranha.dtb' "$DTS_DIR/Makefile" || { echo "ERROR: could not register the DTB in $DTS_DIR/Makefile"; exit 1; }
 
 make sunxi_defconfig
 
@@ -63,5 +72,7 @@ EOF
 make olddefconfig
 echo "=== BUILDING zImage + dtbs ==="
 make -j"$(nproc)" zImage dtbs modules 2>&1 | tail -30
-ls -l arch/arm/boot/zImage arch/arm/boot/dts/allwinner/sun4i-a10-topwise-a721.dtb
+# GT827 touchscreen driver: built out of tree from this repository
+make M="$PRJ/gt827" modules
+ls -l arch/arm/boot/zImage "$DTS_DIR/sun4i-a10-piranha.dtb" "$PRJ/gt827/gt827.ko"
 echo KERNEL_BUILD_DONE

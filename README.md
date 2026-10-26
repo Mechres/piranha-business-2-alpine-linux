@@ -76,13 +76,23 @@ A single Cortex-A8 with 1 GB RAM and 800×480 puts this in the light desktop / k
 
 All scripts derive the project root from their own location, so they also work under `sudo`.
 
+### 0. Host Requirements
+- Linux x86_64 workstation with `git`, `make`, `gcc`, `bison`, `flex`, `swig`, `python3`, `bc`, `libssl-dev`, `curl`, `xz`
+- `podman` and `qemu-user-static` with the `qemu-arm` binfmt handler registered (for the Alpine rootfs)
+- `sunxi-tools` is built automatically by `20-fex-decode.sh` if you want to re-decode `script.bin`
+
 ### 1. Build Everything
 ```bash
-# Set cross toolchain
-source scripts/00-env.sh
+# Download the toolchain (Bootlin), mainline Linux (pinned commit) and U-Boot.
+# Skip the toolchain with SKIP_TOOLCHAIN=1 if you use your own (TOOLCHAIN_DIR / CROSS_COMPILE).
+bash scripts/fetch-sources.sh
 
-# Linux kernel, DTB and modules
-sudo bash scripts/30-kernel-build.sh
+# U-Boot (also produces tools/mkimage used by the SD card script)
+bash scripts/25-uboot-build.sh
+
+# Linux kernel, DTB (the script installs dts/sun4i-a10-piranha.dts into the tree) and modules,
+# plus the out-of-tree GT827 touchscreen module from gt827/
+bash scripts/30-kernel-build.sh
 
 # Alpine rootfs (stage 1 needs no root; stage 2 installs packages, services, modules)
 bash scripts/45-alpine-stage1.sh

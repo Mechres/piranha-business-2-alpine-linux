@@ -82,7 +82,7 @@ make ARCH=arm CROSS_COMPILE=arm-buildroot-linux-gnueabihf- zImage dtbs modules -
 Preferred route:
 
 ```bash
-sudo bash scripts/30-kernel-build.sh
+bash scripts/30-kernel-build.sh
 sudo bash scripts/80-update-kernel.sh /dev/sdX
 ```
 
