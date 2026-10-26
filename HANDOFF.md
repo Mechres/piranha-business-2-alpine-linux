@@ -117,3 +117,14 @@ sudo bash scripts/50-sdcard-alpine.sh /dev/sdX
 
 - The SD-card swap + reboot loop is slow, so prefer remote (SSH) workflows.
 - When SSH is unavailable, run `scripts/diag.sh` on the tablet: it writes `/diag.txt` to the SD card, which can be read on the PC. This has been the most useful diagnostic route.
+
+## Legacy Debian route: pitfalls
+
+The first rootfs attempt used Debian bookworm armhf via podman + qemu-arm binfmt (superseded by Alpine):
+
+- On Arch, `dpkg` is missing, so `debootstrap` fails with `Unknown architecture: x86_64`; podman with the official `debian:bookworm` armhf image avoids this.
+- `--arch` and `--platform` cannot be combined; use only `--platform linux/arm/v7`.
+- systemd does not run in the container, so units were enabled with manual symlinks.
+- `useradd -G` fails if the group does not exist; run `groupadd` first.
+- `firmware-realtek` is in non-free on bookworm; take the firmware from Android instead.
+- podman bind-mounts `/etc/hostname`, `/etc/hosts` and `/etc/resolv.conf`, so an export yields hostname `debuerreotype` and an empty `hosts`; the legacy scripts repair this.
